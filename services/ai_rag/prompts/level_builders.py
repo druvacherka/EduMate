@@ -7,13 +7,16 @@ from services.ai_rag.prompts.beginner_prompts import beginner_engine
 
 logger = logging.getLogger(__name__)
 
+# System-wide formatting rule enforced across all levels
+MATH_FORMATTING_RULE = """
+FORMATTING RULE:
+- Format mathematical expressions using KaTeX display math blocks: $$\\mathbf{{Complexity:}}\\ \\mathcal{{O}}(n \\log n)$$.
+- Format code blocks using syntax tags (e.g. ```cpp, ```python).
+"""
+
 
 class IntermediatePromptEngine:
-    """Builds Socratic tutoring prompts for Intermediate students.
-
-    Focuses on standard technical terminology, algorithmic complexity (Big-O time/space),
-    clean code implementation snippets, and structured step-by-step breakdowns.
-    """
+    """Builds Socratic tutoring prompts for Intermediate students."""
 
     INTERMEDIATE_SYSTEM_TEMPLATE = """You are EduMate, a precise and engaging AI Personal Tutor.
 Target Level: INTERMEDIATE STUDENT
@@ -28,6 +31,7 @@ PEDAGOGICAL STRATEGY FOR INTERMEDIATE STUDENTS:
 SUBJECT: {subject}
 ACTIVE TOPIC: {topic}
 
+{math_rule}
 {language_instruction}
 {weak_area_scaffolding}
 """
@@ -46,6 +50,7 @@ ACTIVE TOPIC: {topic}
         return self.INTERMEDIATE_SYSTEM_TEMPLATE.format(
             subject=subject,
             topic=topic,
+            math_rule=MATH_FORMATTING_RULE,
             language_instruction=language_instruction,
             weak_area_scaffolding=weak_area_scaffolding,
         ).strip()
@@ -66,11 +71,7 @@ ACTIVE TOPIC: {topic}
 
 
 class AdvancedPromptEngine:
-    """Builds Socratic tutoring prompts for Advanced students.
-
-    Focuses on rigorous mathematical proofs, formal complexity analysis,
-    boundary conditions, edge cases, memory layout, and system-level optimization trade-offs.
-    """
+    """Builds Socratic tutoring prompts for Advanced students."""
 
     ADVANCED_SYSTEM_TEMPLATE = """You are EduMate, a rigorous AI Personal Tutor for advanced engineering scholars.
 Target Level: ADVANCED SCHOLAR
@@ -78,13 +79,14 @@ Target Level: ADVANCED SCHOLAR
 PEDAGOGICAL STRATEGY FOR ADVANCED STUDENTS:
 1. Provide deep technical rigor, mathematical formulations, and formal complexity proofs.
 2. Examine boundary conditions, edge cases, cache locality, memory management, and hardware trade-offs.
-3. Use LaTeX display math formatting ($$<formula>$$) for mathematical proofs and recurrences.
+3. Use KaTeX display math formatting ($$<formula>$$) for mathematical proofs and recurrences.
 4. Challenge assumptions and compare competing algorithmic approaches or data structure variants.
 5. End with an open-ended advanced design or optimization Socratic challenge.
 
 SUBJECT: {subject}
 ACTIVE TOPIC: {topic}
 
+{math_rule}
 {language_instruction}
 {weak_area_scaffolding}
 """
@@ -103,6 +105,7 @@ ACTIVE TOPIC: {topic}
         return self.ADVANCED_SYSTEM_TEMPLATE.format(
             subject=subject,
             topic=topic,
+            math_rule=MATH_FORMATTING_RULE,
             language_instruction=language_instruction,
             weak_area_scaffolding=weak_area_scaffolding,
         ).strip()
