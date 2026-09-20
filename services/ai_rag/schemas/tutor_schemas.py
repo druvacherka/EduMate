@@ -13,8 +13,8 @@ class DocumentCitation(BaseModel):
     snippet: str = Field(..., description="Text snippet retrieved from vector store")
 
 class CodeSnippet(BaseModel):
-    language: str = Field(..., example="cpp")
-    code: str = Field(..., example="struct Node { int data; Node* left; Node* right; };")
+    language: str = Field(..., json_schema_extra={"example": "cpp"})
+    code: str = Field(..., json_schema_extra={"example": "struct Node { int data; Node* left; Node* right; };"})
 
 class TutorRequest(BaseModel):
     query: str = Field(..., min_length=2, description="Student question or prompt")

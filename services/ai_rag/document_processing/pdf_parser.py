@@ -5,7 +5,12 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import fitz  # PyMuPDF
+try:
+    import fitz  # PyMuPDF
+    FITZ_AVAILABLE = True
+except ImportError:
+    fitz = None
+    FITZ_AVAILABLE = False
 
 from services.ai_rag.schemas.pdf_schemas import (
     PageContent,
@@ -36,15 +41,19 @@ class PDFParser:
         """
         path = Path(file_path)
 
-        if not path.exists():
-            logger.error(f"PDF file not found: {file_path}")
-            return self._error_document(path.name, f"File not found: {file_path}")
-
         if path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
             logger.error(f"Unsupported file type: {path.suffix}")
             return self._error_document(
                 path.name, f"Unsupported file type: {path.suffix}. Only PDF files are accepted."
             )
+
+        if not path.exists():
+            logger.error(f"PDF file not found: {file_path}")
+            return self._error_document(path.name, f"File not found: {file_path}")
+
+        if not FITZ_AVAILABLE or fitz is None:
+            logger.error("PyMuPDF (fitz) library is not installed.")
+            return self._error_document(path.name, "PyMuPDF (fitz) library is not installed.")
 
         try:
             doc = fitz.open(str(path))
@@ -110,25 +119,114 @@ class PDFParser:
         return pages
 
     def _extract_page_text(self, page: fitz.Page, page_number: int) -> PageContent:
-        """Extract and clean text from a single PDF page.
+        """Extract and clean text, structural headers, and tables from a single PDF page.
 
         Args:
             page: PyMuPDF page object.
             page_number: 1-indexed page number.
 
         Returns:
-            PageContent with cleaned text and table detection flag.
+            PageContent with cleaned text, detected headers, and markdown table snippets.
         """
         raw_text = page.get_text("text")
         cleaned_text = self._normalize_whitespace(raw_text)
-        has_tables = self._detect_tables(page)
+        headers = self._extract_headers(page)
+        table_snippets = self._extract_table_snippets(page)
+        has_tables = len(table_snippets) > 0 or self._detect_tables(page)
+
+        # Append formatted table markdown to page text for context continuity
+        if table_snippets:
+            tables_combined = "\n\n".join(table_snippets)
+            cleaned_text = f"{cleaned_text}\n\n[Extracted Tables]\n{tables_combined}".strip()
 
         return PageContent(
             page_number=page_number,
             text=cleaned_text,
             has_tables=has_tables,
+            table_snippets=table_snippets,
+            headers=headers,
             char_count=len(cleaned_text),
         )
+
+    def _extract_headers(self, page: fitz.Page) -> list[str]:
+        """Extract structural header candidate strings from PDF page using font/layout cues.
+
+        Args:
+            page: PyMuPDF page object.
+
+        Returns:
+            List of detected section header titles.
+        """
+        headers: list[str] = []
+        try:
+            dehyphenate_flag = getattr(fitz, "TEXT_DEHYPHENATE", 0) if fitz else 0
+            page_dict = page.get_text("dict", flags=dehyphenate_flag) if hasattr(page, "get_text") else {}
+            if isinstance(page_dict, str):
+                page_dict = {}
+            blocks = page_dict.get("blocks", [])
+
+            # Compute average font size across spans to identify prominent header fonts
+            font_sizes: list[float] = []
+            for b in blocks:
+                if b.get("type") == 0:  # Text block
+                    for line in b.get("lines", []):
+                        for span in line.get("spans", []):
+                            if span.get("text", "").strip():
+                                font_sizes.append(span.get("size", 10.0))
+
+            avg_size = (sum(font_sizes) / len(font_sizes)) if font_sizes else 10.0
+            header_threshold = avg_size * 1.15  # Spans 15% larger than average font
+
+            for b in blocks:
+                if b.get("type") == 0:
+                    for line in b.get("lines", []):
+                        line_text = "".join(s.get("text", "") for s in line.get("spans", [])).strip()
+                        if not line_text:
+                            continue
+                        max_span_size = max((s.get("size", 0.0) for s in line.get("spans", [])), default=0.0)
+                        is_bold = any(s.get("flags", 0) & 2 for s in line.get("spans", []))
+
+                        if (max_span_size >= header_threshold or is_bold) and len(line_text) <= 120:
+                            if line_text not in headers:
+                                headers.append(line_text)
+        except Exception as exc:
+            logger.debug(f"Header extraction fallback: {exc}")
+
+        return headers
+
+    def _extract_table_snippets(self, page: fitz.Page) -> list[str]:
+        """Extract table structures from page and format as Markdown tables.
+
+        Args:
+            page: PyMuPDF page object.
+
+        Returns:
+            List of Markdown formatted table strings.
+        """
+        table_markdowns: list[str] = []
+        try:
+            tabs = page.find_tables()
+            for tab in tabs.tables:
+                data = tab.extract()
+                if not data or len(data) < 1:
+                    continue
+
+                # Format rows into Markdown syntax
+                md_rows: list[str] = []
+                headers = [str(cell or "").strip().replace("\n", " ") for cell in data[0]]
+                md_rows.append("| " + " | ".join(headers) + " |")
+                md_rows.append("| " + " | ".join(["---"] * len(headers)) + " |")
+
+                for row in data[1:]:
+                    cells = [str(cell or "").strip().replace("\n", " ") for cell in row]
+                    md_rows.append("| " + " | ".join(cells) + " |")
+
+                table_md = "\n".join(md_rows)
+                table_markdowns.append(table_md)
+        except Exception as exc:
+            logger.debug(f"Table markdown extraction fallback: {exc}")
+
+        return table_markdowns
 
     def _detect_tables(self, page: fitz.Page) -> bool:
         """Detect whether a page contains table structures.
