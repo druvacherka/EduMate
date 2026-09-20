@@ -70,16 +70,37 @@ class TextChunker:
         doc_name = parsed_doc.metadata.file_name
         all_chunks: list[TextChunk] = []
         chunk_index = 0
+        active_hierarchy: list[str] = []
 
         for page in parsed_doc.pages:
             if not page.text.strip():
                 continue
+
+            # Update active section hierarchy using page headers if present
+            page_headers = getattr(page, "headers", [])
+            for hdr in page_headers:
+                hdr_clean = hdr.strip()
+                if not hdr_clean:
+                    continue
+                if any(hdr_clean.lower().startswith(kw) for kw in ["chapter", "part"]):
+                    active_hierarchy = [hdr_clean]
+                elif any(hdr_clean.lower().startswith(kw) for kw in ["section", "unit"]):
+                    if len(active_hierarchy) > 0:
+                        active_hierarchy = [active_hierarchy[0], hdr_clean]
+                    else:
+                        active_hierarchy = [hdr_clean]
+                elif hdr_clean not in active_hierarchy:
+                    if len(active_hierarchy) >= 3:
+                        active_hierarchy[-1] = hdr_clean
+                    else:
+                        active_hierarchy.append(hdr_clean)
 
             page_chunks = self._split_page_text(
                 text=page.text,
                 page_number=page.page_number,
                 doc_name=doc_name,
                 start_index=chunk_index,
+                section_hierarchy=list(active_hierarchy),
             )
             all_chunks.extend(page_chunks)
             chunk_index += len(page_chunks)
@@ -103,6 +124,7 @@ class TextChunker:
         page_number: int,
         doc_name: str,
         start_index: int,
+        section_hierarchy: Optional[list[str]] = None,
     ) -> list[TextChunk]:
         """Split a single page's text into chunks with overlap.
 
@@ -111,6 +133,7 @@ class TextChunker:
             page_number: 1-indexed page number.
             doc_name: Document filename for chunk ID generation.
             start_index: Global chunk index offset.
+            section_hierarchy: Optional list of active section header titles.
 
         Returns:
             List of TextChunk objects for this page.
@@ -121,6 +144,7 @@ class TextChunker:
             page_number=page_number,
             doc_name=doc_name,
             start_index=start_index,
+            section_hierarchy=section_hierarchy or [],
         )
 
     def _recursive_split(self, text: str, separator_index: int = 0) -> list[str]:
@@ -187,6 +211,7 @@ class TextChunker:
         page_number: int,
         doc_name: str,
         start_index: int,
+        section_hierarchy: Optional[list[str]] = None,
     ) -> list[TextChunk]:
         """Merge small segments into chunks and apply overlap between them.
 
@@ -199,6 +224,7 @@ class TextChunker:
             page_number: Source page number.
             doc_name: Document filename.
             start_index: Global chunk index offset.
+            section_hierarchy: Hierarchical section titles breadcrumb.
 
         Returns:
             List of TextChunk objects with overlap applied.
@@ -209,6 +235,7 @@ class TextChunker:
         chunks: list[TextChunk] = []
         current_parts: list[str] = []
         current_len = 0
+        hierarchy = section_hierarchy or []
 
         for segment in segments:
             seg_len = len(segment)
@@ -218,6 +245,7 @@ class TextChunker:
                 chunk_text = " ".join(current_parts)
                 section = self._detect_section_title(chunk_text)
                 chunk_idx = start_index + len(chunks)
+                has_tbl = "[Extracted Tables]" in chunk_text or "| --- |" in chunk_text
 
                 chunks.append(
                     TextChunk(
@@ -225,6 +253,8 @@ class TextChunker:
                         text=chunk_text,
                         page_number=page_number,
                         section_title=section,
+                        section_hierarchy=hierarchy,
+                        has_table=has_tbl,
                         char_count=len(chunk_text),
                         token_estimate=len(chunk_text) // 4,
                     )
@@ -245,6 +275,7 @@ class TextChunker:
             chunk_text = " ".join(current_parts)
             section = self._detect_section_title(chunk_text)
             chunk_idx = start_index + len(chunks)
+            has_tbl = "[Extracted Tables]" in chunk_text or "| --- |" in chunk_text
 
             chunks.append(
                 TextChunk(
@@ -252,6 +283,8 @@ class TextChunker:
                     text=chunk_text,
                     page_number=page_number,
                     section_title=section,
+                    section_hierarchy=hierarchy,
+                    has_table=has_tbl,
                     char_count=len(chunk_text),
                     token_estimate=len(chunk_text) // 4,
                 )

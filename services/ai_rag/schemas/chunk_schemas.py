@@ -30,6 +30,13 @@ class TextChunk(BaseModel):
     section_title: Optional[str] = Field(
         None, description="Detected section heading if available"
     )
+    section_hierarchy: List[str] = Field(
+        default_factory=list,
+        description="Hierarchical section breadcrumbs (e.g. ['Chapter 1', 'Section 1.2'])",
+    )
+    has_table: bool = Field(
+        False, description="Whether this chunk contains Markdown table content"
+    )
     char_count: int = Field(..., ge=0, description="Character count of chunk text")
     token_estimate: int = Field(
         ..., ge=0, description="Estimated token count (chars / 4 heuristic)"
