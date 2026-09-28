@@ -8,6 +8,8 @@ import { QuizView } from './components/QuizView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SettingsView } from './components/SettingsView';
 
+import { fetchStudentProfile } from './services/api';
+
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('tutor');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -18,13 +20,19 @@ export function App() {
     email: 'druva@edumate.edu',
     level: 'Beginner',
     language: 'English',
-    currentSubject: 'Data Structures',
+    currentSubject: 'Data Structures & Algorithms',
     currentTopic: 'Binary Search Trees',
-    masteryScore: 82,
-    weakAreas: ['BST Deletion', '3NF Normalization'],
-    strongAreas: ['Arrays', 'Linked Lists', 'In-Order Traversal'],
+    masteryScore: 78.5,
+    weakAreas: ['Tree Balancing', 'Graph Traversals', 'Recurrence Relations'],
+    strongAreas: ['Arrays & HashMaps', 'Sorting Algorithms', 'Stack Operations'],
     studyStreakDays: 5
   });
+
+  React.useEffect(() => {
+    fetchStudentProfile().then(data => {
+      if (data) setProfile(prev => ({ ...prev, ...data }));
+    });
+  }, []);
 
   return (
     <div className="app-container" data-theme={theme}>

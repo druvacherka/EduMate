@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { QuizQuestion, StudentProfile } from '../types';
+import { StudentProfile } from '../types';
+import { 
+  generateQuizQuestions, 
+  submitQuizAnswers, 
+  QuizQuestionData, 
+  QuizSubmissionResponse 
+} from '../services/api';
 import { 
   Award, 
   CheckCircle2, 
@@ -9,7 +15,9 @@ import {
   ArrowRight, 
   Clock, 
   Sparkles,
-  Zap
+  Zap,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 
 interface QuizViewProps {
@@ -17,7 +25,11 @@ interface QuizViewProps {
 }
 
 export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
-  const sampleQuestions: QuizQuestion[] = [
+  const [topic, setTopic] = useState(profile.currentTopic || 'Binary Search Trees');
+  const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('quiz-default');
+  const [questions, setQuestions] = useState<QuizQuestionData[]>([
     {
       id: 'q1',
       type: 'mcq',
@@ -53,36 +65,56 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
       correctAnswer: 1,
       explanation: 'You can replace it with either the In-Order Successor (minimum in right subtree) or In-Order Predecessor (maximum in left subtree).'
     }
-  ];
+  ]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: number }>({});
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [score, setScore] = useState(0);
+  const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: any }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<QuizSubmissionResponse | null>(null);
 
-  const currentQ = sampleQuestions[currentIndex];
+  const currentQ = questions[currentIndex] || questions[0];
+
+  const handleGenerateQuiz = async () => {
+    setIsGenerating(true);
+    try {
+      const data = await generateQuizQuestions({
+        topic,
+        difficulty,
+        num_questions: 3,
+      });
+      setSessionId(data.session_id);
+      setQuestions(data.questions);
+      setCurrentIndex(0);
+      setSelectedAnswers({});
+      setSubmissionResult(null);
+    } catch (err) {
+      console.error('Quiz generation failed:', err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleOptionSelect = (optionIdx: number) => {
-    if (isSubmitted) return;
+    if (submissionResult) return;
     setSelectedAnswers(prev => ({ ...prev, [currentQ.id]: optionIdx }));
   };
 
-  const handleSubmitQuiz = () => {
-    let totalScore = 0;
-    sampleQuestions.forEach((q) => {
-      if (selectedAnswers[q.id] === q.correctAnswer) {
-        totalScore += 1;
-      }
-    });
-    setScore(totalScore);
-    setIsSubmitted(true);
+  const handleSubmitQuiz = async () => {
+    setIsSubmitting(true);
+    try {
+      const result = await submitQuizAnswers(sessionId, selectedAnswers);
+      setSubmissionResult(result);
+    } catch (err) {
+      console.error('Quiz submission failed:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
     setCurrentIndex(0);
     setSelectedAnswers({});
-    setIsSubmitted(false);
-    setScore(0);
+    setSubmissionResult(null);
   };
 
   return (
@@ -95,62 +127,100 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
       gap: '24px',
       background: 'var(--bg-primary)'
     }}>
-      {/* Quiz Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Award color="var(--accent-amber)" /> Adaptive Practice & AI Quiz Generator
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
-            AI-generated questions customized for target topic <strong>{profile.currentTopic}</strong> ({profile.level} Level).
-          </p>
+      {/* Quiz Generator Toolbar */}
+      <div className="glass-panel" style={{
+        padding: '20px 24px',
+        borderRadius: 'var(--radius-lg)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '16px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '220px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+              Quiz Topic
+            </label>
+            <input
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="e.g. Binary Search Trees, Graph Algorithms"
+              style={{
+                background: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.9rem',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+              Difficulty
+            </label>
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value as any)}
+              style={{
+                background: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.9rem',
+                outline: 'none'
+              }}
+            >
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            <Clock size={16} color="var(--accent-cyan)" />
-            <span>Time: 02:45</span>
-          </div>
-          <span className="badge badge-intermediate">
-            Adaptive Difficulty: {currentQ.difficulty}
-          </span>
-        </div>
+        <button
+          onClick={handleGenerateQuiz}
+          disabled={isGenerating}
+          className="btn btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          {isGenerating ? <Loader2 size={16} className="spin-slow" /> : <Sparkles size={16} />}
+          <span>{isGenerating ? 'Generating Quiz...' : 'Generate AI Quiz'}</span>
+        </button>
       </div>
 
-      {!isSubmitted ? (
-        /* Active Question Card */
+      {/* Main Quiz Taking Interface or Result Screen */}
+      {!submissionResult ? (
         <div className="glass-panel" style={{
           padding: '32px',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: 'var(--radius-xl)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '24px',
-          maxWidth: '800px',
-          margin: '0 auto',
-          width: '100%'
+          gap: '24px'
         }}>
-          {/* Question Progress Bar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            <span>Question {currentIndex + 1} of {sampleQuestions.length}</span>
-            <span>Topic: {currentQ.topic}</span>
-          </div>
-
-          <div style={{
-            height: '6px',
-            background: 'var(--bg-tertiary)',
-            borderRadius: 'var(--radius-full)',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${((currentIndex + 1) / sampleQuestions.length) * 100}%`,
-              background: 'var(--accent-gradient)',
-              transition: 'var(--transition-smooth)'
-            }} />
+          {/* Question Stepper Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span className="badge badge-beginner">
+                Question {currentIndex + 1} of {questions.length}
+              </span>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {currentQ.topic} ({currentQ.difficulty})
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <Clock size={16} color="var(--accent-amber)" />
+              <span>Self-Paced Practice</span>
+            </div>
           </div>
 
           {/* Question Text */}
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.5 }}>
             {currentQ.question}
           </h3>
 
@@ -159,47 +229,50 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
             {currentQ.options?.map((option, idx) => {
               const isSelected = selectedAnswers[currentQ.id] === idx;
               return (
-                <button
+                <div
                   key={idx}
                   onClick={() => handleOptionSelect(idx)}
                   className="glass-panel"
                   style={{
                     padding: '16px 20px',
                     borderRadius: 'var(--radius-md)',
-                    textAlign: 'left',
-                    fontSize: '0.95rem',
-                    fontFamily: 'var(--font-main)',
-                    color: isSelected ? '#ffffff' : 'var(--text-primary)',
-                    background: isSelected ? 'var(--accent-gradient)' : 'var(--bg-secondary)',
-                    border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
                     cursor: 'pointer',
-                    transition: 'var(--transition-fast)',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between'
+                    justifyContent: 'space-between',
+                    border: isSelected ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-secondary)',
+                    transition: 'var(--transition-smooth)'
                   }}
                 >
-                  <span>{option}</span>
-                  {isSelected && <CheckCircle2 size={18} color="#ffffff" />}
-                </button>
+                  <span style={{ fontSize: '0.95rem', color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)', fontWeight: isSelected ? 600 : 400 }}>
+                    {option}
+                  </span>
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    border: isSelected ? '6px solid var(--accent-primary)' : '2px solid var(--border-color)',
+                    background: isSelected ? '#ffffff' : 'transparent'
+                  }} />
+                </div>
               );
             })}
           </div>
 
-          {/* Question Navigation Controls */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+          {/* Navigation & Submit Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
             <button
+              onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
               disabled={currentIndex === 0}
-              onClick={() => setCurrentIndex(prev => prev - 1)}
               className="btn btn-secondary"
-              style={{ opacity: currentIndex === 0 ? 0.5 : 1 }}
             >
               Previous
             </button>
 
-            {currentIndex < sampleQuestions.length - 1 ? (
+            {currentIndex < questions.length - 1 ? (
               <button
-                onClick={() => setCurrentIndex(prev => prev + 1)}
+                onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))}
                 className="btn btn-primary"
               >
                 <span>Next Question</span>
@@ -208,104 +281,135 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
             ) : (
               <button
                 onClick={handleSubmitQuiz}
+                disabled={isSubmitting || Object.keys(selectedAnswers).length === 0}
                 className="btn btn-primary"
-                style={{ background: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)' }}
+                style={{ background: 'var(--accent-emerald)' }}
               >
-                <span>Submit Quiz for AI Evaluation</span>
-                <Zap size={16} />
+                {isSubmitting ? <Loader2 size={16} className="spin-slow" /> : <Award size={16} />}
+                <span>{isSubmitting ? 'Evaluating...' : 'Submit Answers'}</span>
               </button>
             )}
           </div>
         </div>
       ) : (
-        /* Quiz Evaluation & Feedback Screen */
-        <div className="glass-panel" style={{
-          padding: '36px',
-          borderRadius: 'var(--radius-lg)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '24px',
-          maxWidth: '850px',
-          margin: '0 auto',
-          width: '100%'
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              background: 'rgba(16, 185, 129, 0.15)',
-              border: '2px solid var(--accent-emerald)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px auto'
-            }}>
-              <Award size={36} color="var(--accent-emerald)" />
+        /* Quiz Evaluation & Corrective Feedback Screen */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Score Summary Banner */}
+          <div className="glass-panel" style={{
+            padding: '28px',
+            borderRadius: 'var(--radius-xl)',
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(16, 185, 129, 0.15))',
+            border: '1px solid var(--border-color-glow)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '20px'
+          }}>
+            <div>
+              <span className="badge badge-beginner" style={{ marginBottom: '8px' }}>
+                Evaluation Complete
+              </span>
+              <h2 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                You Scored {submissionResult.score} / {submissionResult.total_questions} ({submissionResult.percentage}%)
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
+                {submissionResult.percentage >= 70 
+                  ? 'Excellent mastery! Your performance has increased your student mastery score.' 
+                  : 'Good effort! Areas needing revision have been logged to your Weak Topics tracker.'}
+              </p>
             </div>
 
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-              Quiz Evaluation Completed!
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Your Score: <strong style={{ color: 'var(--accent-cyan)', fontSize: '1.2rem' }}>{score} / {sampleQuestions.length}</strong> ({Math.round((score / sampleQuestions.length) * 100)}%)
-            </p>
+            <button
+              onClick={handleReset}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <RotateCcw size={16} />
+              <span>Take Another Quiz</span>
+            </button>
           </div>
 
-          {/* Detailed Question Explanations */}
+          {/* Weak Topics Warning Alert if mistakes occurred */}
+          {submissionResult.mistaken_topics && submissionResult.mistaken_topics.length > 0 && (
+            <div style={{
+              padding: '16px 20px',
+              borderRadius: 'var(--radius-lg)',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              color: 'var(--accent-rose)'
+            }}>
+              <AlertTriangle size={24} style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontWeight: 600 }}>
+                  Weak Area Identified & Tracked
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Topics requiring reinforcement: <strong>{submissionResult.mistaken_topics.join(', ')}</strong>. EduMate will emphasize these in your next Socratic chat.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Question Breakdown and Step-by-Step Corrective Feedback */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {sampleQuestions.map((q, idx) => {
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+              Question-by-Question Review
+            </h3>
+
+            {questions.map((q, idx) => {
               const userAns = selectedAnswers[q.id];
-              const isCorrect = userAns === q.correctAnswer;
+              const isCorrect = userAns !== undefined && (userAns === q.correctAnswer || String(userAns) === String(q.correctAnswer));
+
               return (
                 <div
-                  key={q.id}
+                  key={idx}
+                  className="glass-panel"
                   style={{
-                    padding: '18px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    border: isCorrect ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(244, 63, 94, 0.3)'
+                    padding: '24px',
+                    borderRadius: 'var(--radius-lg)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                    borderLeft: isCorrect ? '4px solid var(--accent-emerald)' : '4px solid var(--accent-rose)'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    {isCorrect ? (
-                      <CheckCircle2 size={18} color="var(--accent-emerald)" />
-                    ) : (
-                      <XCircle size={18} color="var(--accent-rose)" />
-                    )}
-                    <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>
-                      Q{idx + 1}: {q.question}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: isCorrect ? 'var(--accent-emerald)' : 'var(--accent-rose)' }}>
+                      {isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      {q.topic}
                     </span>
                   </div>
 
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginLeft: '26px' }}>
-                    <div>Your Answer: <strong>{q.options ? q.options[userAns] || 'Not answered' : 'N/A'}</strong></div>
-                    {!isCorrect && (
-                      <div style={{ color: 'var(--accent-emerald)', marginTop: '2px' }}>
-                        Correct Answer: <strong>{q.options ? q.options[q.correctAnswer as number] : 'N/A'}</strong>
-                      </div>
-                    )}
-                    <div style={{
-                      marginTop: '8px',
-                      padding: '8px 12px',
-                      background: 'rgba(99, 102, 241, 0.08)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--accent-cyan)'
-                    }}>
-                      💡 <strong>Tutor Explanation:</strong> {q.explanation}
-                    </div>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {q.question}
+                  </h4>
+
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <div>Your answer: <strong>{q.options ? q.options[userAns] || 'None' : String(userAns)}</strong></div>
+                    <div>Correct answer: <strong style={{ color: 'var(--accent-emerald)' }}>{q.options ? q.options[q.correctAnswer] || String(q.correctAnswer) : String(q.correctAnswer)}</strong></div>
+                  </div>
+
+                  {/* Step-by-Step Explanation */}
+                  <div style={{
+                    padding: '12px 16px',
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '0.85rem',
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.5
+                  }}>
+                    <strong>Explanation:</strong> {q.explanation}
                   </div>
                 </div>
               );
             })}
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '12px' }}>
-            <button onClick={handleReset} className="btn btn-secondary">
-              <RotateCcw size={16} />
-              <span>Retake Practice Quiz</span>
-            </button>
           </div>
         </div>
       )}

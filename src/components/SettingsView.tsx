@@ -1,5 +1,6 @@
 import React from 'react';
 import { StudentProfile, Language, LearningLevel } from '../types';
+import { updateStudentProfile } from '../services/api';
 import { Settings, User, Globe, Sliders, Volume2, Shield } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -83,7 +84,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, setProfile 
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Default Learning Level</label>
               <select
                 value={profile.level}
-                onChange={(e) => setProfile(prev => ({ ...prev, level: e.target.value as LearningLevel }))}
+                onChange={async (e) => {
+                  const newLevel = e.target.value as LearningLevel;
+                  setProfile(prev => ({ ...prev, level: newLevel }));
+                  await updateStudentProfile({ level: newLevel });
+                }}
                 style={{
                   width: '100%',
                   background: 'var(--bg-tertiary)',
@@ -105,7 +110,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, setProfile 
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Preferred Language</label>
               <select
                 value={profile.language}
-                onChange={(e) => setProfile(prev => ({ ...prev, language: e.target.value as Language }))}
+                onChange={async (e) => {
+                  const newLang = e.target.value as Language;
+                  setProfile(prev => ({ ...prev, language: newLang }));
+                  await updateStudentProfile({ language: newLang });
+                }}
                 style={{
                   width: '100%',
                   background: 'var(--bg-tertiary)',
