@@ -13,6 +13,10 @@ from services.ai_rag.llm_client import llm_client
 from backend.database import get_db_connection
 
 
+from services.ai_rag.prompts.adaptive_scaler import adaptive_difficulty_scaler
+from services.ai_rag.validators.json_repair import json_repair_middleware
+
+
 class QuizState(str, Enum):
     """Finite State Machine states for an interactive quiz session."""
     CREATED = "CREATED"
@@ -29,6 +33,7 @@ class QuizStateMachine:
         topic: str,
         difficulty: str = "Medium",
         num_questions: int = 3,
+        adaptive: bool = True,
     ) -> Dict[str, Any]:
         """Generate questions and initialize a new quiz session in CREATED state.
 
@@ -36,17 +41,31 @@ class QuizStateMachine:
             topic: Technical subject topic (e.g. 'Binary Search Trees').
             difficulty: 'Easy', 'Medium', or 'Hard'.
             num_questions: Total questions to generate.
+            adaptive: Whether to calibrate difficulty using student's historical mastery.
 
         Returns:
             Dict containing session metadata and generated questions.
         """
         session_id = f"quiz-{uuid.uuid4().hex[:8]}"
 
+        # Check student mastery to calibrate difficulty if adaptive
+        calibrated_diff = difficulty
+        if adaptive:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT mastery_score FROM student_profile WHERE id = 1;")
+                row = cursor.fetchone()
+                if row:
+                    calibrated_diff = adaptive_difficulty_scaler.determine_adaptive_difficulty(
+                        mastery_score=row["mastery_score"],
+                        requested_difficulty=difficulty,
+                    )
+
         # Generate questions using LLM client
         questions = await llm_client.generate_structured_quiz(
             topic=topic,
             num_questions=num_questions,
-            difficulty=difficulty,
+            difficulty=calibrated_diff,
         )
 
         with get_db_connection() as conn:
@@ -59,7 +78,7 @@ class QuizStateMachine:
             """, (
                 session_id,
                 topic,
-                difficulty,
+                calibrated_diff,
                 len(questions),
                 QuizState.ACTIVE.value,
                 json.dumps(questions),
@@ -70,7 +89,7 @@ class QuizStateMachine:
         return {
             "session_id": session_id,
             "topic": topic,
-            "difficulty": difficulty,
+            "difficulty": calibrated_diff,
             "status": QuizState.ACTIVE.value,
             "questions": questions,
         }
@@ -114,11 +133,22 @@ class QuizStateMachine:
                 correct_ans = q.get("correctAnswer")
                 user_ans = user_answers.get(q_id)
 
-                # Match answer (handle type casting for int options vs strings)
+                # Evaluate answer based on question type
                 is_correct = False
-                if user_ans is not None:
-                    if str(user_ans).strip().lower() == str(correct_ans).strip().lower():
-                        is_correct = True
+                explanation = q.get("explanation", "")
+
+                if q.get("type") == "short":
+                    eval_res = adaptive_difficulty_scaler.evaluate_short_answer_heuristic(
+                        student_answer=str(user_ans or ""),
+                        reference_answer=str(correct_ans or ""),
+                        rubric_keywords=q.get("rubric_keywords") or [str(correct_ans)],
+                    )
+                    is_correct = eval_res["is_correct"]
+                    explanation = f"{eval_res['feedback']} {explanation}"
+                else:
+                    if user_ans is not None:
+                        if str(user_ans).strip().lower() == str(correct_ans).strip().lower():
+                            is_correct = True
 
                 if is_correct:
                     score += 1
@@ -133,7 +163,7 @@ class QuizStateMachine:
                     "user_answer": user_ans,
                     "correct_answer": correct_ans,
                     "is_correct": is_correct,
-                    "explanation": q.get("explanation"),
+                    "explanation": explanation,
                 })
 
             total = len(questions)

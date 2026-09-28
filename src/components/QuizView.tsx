@@ -224,41 +224,67 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
             {currentQ.question}
           </h3>
 
-          {/* Answer Options */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {currentQ.options?.map((option, idx) => {
-              const isSelected = selectedAnswers[currentQ.id] === idx;
-              return (
-                <div
-                  key={idx}
-                  onClick={() => handleOptionSelect(idx)}
-                  className="glass-panel"
-                  style={{
-                    padding: '16px 20px',
-                    borderRadius: 'var(--radius-md)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    border: isSelected ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                    background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-secondary)',
-                    transition: 'var(--transition-smooth)'
-                  }}
-                >
-                  <span style={{ fontSize: '0.95rem', color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)', fontWeight: isSelected ? 600 : 400 }}>
-                    {option}
-                  </span>
-                  <div style={{
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    border: isSelected ? '6px solid var(--accent-primary)' : '2px solid var(--border-color)',
-                    background: isSelected ? '#ffffff' : 'transparent'
-                  }} />
-                </div>
-              );
-            })}
-          </div>
+          {/* Answer Options or Short Answer Input */}
+          {currentQ.type === 'short' || (!currentQ.options || currentQ.options.length === 0) ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Type your concise conceptual explanation:
+              </label>
+              <textarea
+                rows={4}
+                value={selectedAnswers[currentQ.id] || ''}
+                onChange={(e) => setSelectedAnswers(prev => ({ ...prev, [currentQ.id]: e.target.value }))}
+                placeholder="Type your answer (e.g. In-order successor replaces the deleted node)..."
+                style={{
+                  width: '100%',
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-primary)',
+                  padding: '14px 18px',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.95rem',
+                  fontFamily: 'var(--font-main)',
+                  outline: 'none',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {currentQ.options.map((option, idx) => {
+                const isSelected = selectedAnswers[currentQ.id] === idx;
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => handleOptionSelect(idx)}
+                    className="glass-panel"
+                    style={{
+                      padding: '16px 20px',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      border: isSelected ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-secondary)',
+                      transition: 'var(--transition-smooth)'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.95rem', color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)', fontWeight: isSelected ? 600 : 400 }}>
+                      {option}
+                    </span>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      border: isSelected ? '6px solid var(--accent-primary)' : '2px solid var(--border-color)',
+                      background: isSelected ? '#ffffff' : 'transparent'
+                    }} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Navigation & Submit Toolbar */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
