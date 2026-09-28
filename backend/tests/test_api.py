@@ -24,6 +24,20 @@ def test_socratic_chat_endpoint():
     assert data["language"] == "English"
     assert len(data["quick_actions"]) > 0
 
+
+def test_multilingual_chat_endpoint():
+    payload = {
+        "query": "బైనరీ సెర్చ్ ట్రీ ఎలా పనిచేస్తుంది?",
+        "level": "Intermediate",
+        "language": "Telugu"
+    }
+    response = client.post("/api/chat/socratic", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["language"] == "Telugu"
+    assert "response" in data
+
+
 def test_quiz_generation_endpoint():
     payload = {
         "topic": "Binary Search Trees",

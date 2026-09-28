@@ -41,6 +41,9 @@ from backend.database import (
 from backend.services.quiz_engine import quiz_state_machine
 from backend.services.analytics_engine import analytics_engine
 
+from services.ai_rag.validators.language_detector import multilingual_detector
+from services.ai_rag.prompts.multilingual_prompts import multilingual_prompt_factory
+
 hybrid_search_engine = HybridSearchEngine(vector_store=qdrant_store)
 grounded_prompt_builder = GroundedPromptBuilder()
 citation_validator = CitationValidator()
@@ -136,10 +139,21 @@ async def generate_socratic_chat(req: SocraticChatRequest):
             except Exception:
                 context_chunks = []
 
+        # Detect query language and align pedagogical persona
+        detected_lang, _ = multilingual_detector.detect_language(req.query, fallback_language=req.language or "English")
+        effective_lang = req.language if req.language in ("Hindi", "Telugu") else detected_lang
+
         # Build grounded system prompt & user payload
-        system_prompt = grounded_prompt_builder.build_system_prompt(user_level=req.level)
+        if effective_lang in ("Hindi", "Telugu"):
+            base_prompt = multilingual_prompt_factory.get_system_prompt(effective_lang, req.level)
+            system_prompt = f"{base_prompt}\n\n{grounded_prompt_builder.build_system_prompt(user_level=req.level)}"
+            enriched_query = multilingual_prompt_factory.prepare_multilingual_query(req.query, effective_lang)
+        else:
+            system_prompt = grounded_prompt_builder.build_system_prompt(user_level=req.level)
+            enriched_query = req.query
+
         user_payload = grounded_prompt_builder.assemble_grounded_prompt(
-            user_query=req.query,
+            user_query=enriched_query,
             context_chunks=context_chunks,
             user_level=req.level,
         )
@@ -172,7 +186,7 @@ async def generate_socratic_chat(req: SocraticChatRequest):
         return SocraticChatResponse(
             response=validation_res.formatted_response,
             level=req.level,
-            language=req.language,
+            language=effective_lang,
             quick_actions=quick_actions,
             citations=citations_dict if citations_dict else None,
         )
