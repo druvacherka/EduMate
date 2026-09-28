@@ -149,7 +149,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      height: 'calc(100vh - 70px)',
+      height: 'calc(100vh - 56px)',
       width: '100%',
       position: 'relative',
       background: 'var(--bg-primary)'
@@ -234,11 +234,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
             </div>
 
             {/* Message Card */}
-            <div className="glass-panel" style={{
-              padding: '18px 22px',
-              borderRadius: msg.sender === 'student' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+            <div style={{
+              padding: '16px 20px',
+              borderRadius: msg.sender === 'student' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
               background: msg.sender === 'student' 
-                ? 'var(--accent-gradient)' 
+                ? '#1d4ed8' 
                 : 'var(--bg-secondary)',
               color: msg.sender === 'student' ? '#ffffff' : 'var(--text-primary)',
               boxShadow: 'var(--shadow-card)',
@@ -246,7 +246,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
               lineHeight: 1.6
             }}>
               {/* Main Text Content */}
-              <div style={{ whiteSpace: 'pre-line', fontSize: '0.95rem' }}>
+              <div style={{ whiteSpace: 'pre-line', fontSize: '0.92rem' }}>
                 {msg.text}
               </div>
 
@@ -255,12 +255,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
                 <div style={{
                   margin: '12px 0',
                   padding: '10px 14px',
-                  background: 'rgba(99, 102, 241, 0.1)',
+                  background: 'rgba(37, 99, 235, 0.08)',
                   borderLeft: '3px solid var(--accent-primary)',
                   borderRadius: 'var(--radius-sm)',
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '0.9rem',
-                  color: 'var(--accent-cyan)'
+                  fontSize: '0.88rem',
+                  color: '#60a5fa'
                 }}>
                   {`$$\\mathbf{Complexity:}\\ ${msg.formula}$$`}
                 </div>
@@ -394,15 +394,22 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
                   <button
                     key={idx}
                     onClick={() => handleSend(action)}
-                    className="btn btn-ghost"
                     style={{
-                      padding: '4px 12px',
-                      fontSize: '0.75rem',
-                      borderRadius: 'var(--radius-full)',
-                      border: '1px solid var(--border-color-glow)',
-                      background: 'rgba(99, 102, 241, 0.06)',
-                      color: 'var(--accent-primary)'
+                      padding: '5px 12px',
+                      fontSize: '0.74rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-tertiary)',
+                      color: '#60a5fa',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 500,
+                      transition: 'var(--transition-fast)'
                     }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
                   >
                     <Lightbulb size={12} />
                     <span>{action}</span>
@@ -466,27 +473,33 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
       )}
 
       {/* Multimodal Input Toolbar */}
-      <div className="glass-panel" style={{
-        padding: '16px 24px',
+      <div style={{
+        padding: '12px 20px',
+        backgroundColor: 'var(--bg-sidebar)',
         borderTop: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
-        gap: '12px'
+        gap: '10px'
       }}>
         {/* Voice Speech Microphone Button */}
         <button
           onClick={toggleRecording}
-          className={`btn ${isRecording ? 'btn-primary pulse-active' : 'btn-secondary'}`}
           style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: 'var(--radius-full)',
+            width: '40px',
+            height: '40px',
+            borderRadius: 'var(--radius-md)',
             padding: 0,
-            background: isRecording ? 'var(--accent-rose)' : 'var(--bg-tertiary)'
+            border: isRecording ? '1px solid var(--accent-rose)' : '1px solid var(--border-color)',
+            background: isRecording ? 'rgba(244, 63, 94, 0.15)' : 'var(--bg-secondary)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'var(--transition-fast)'
           }}
           title="Speak your question using Voice STT"
         >
-          <Mic size={20} color={isRecording ? '#ffffff' : 'var(--accent-primary)'} />
+          <Mic size={18} color={isRecording ? 'var(--accent-rose)' : '#60a5fa'} />
         </button>
 
         {/* Text Input Box */}
@@ -498,30 +511,40 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
           placeholder={`Ask EduMate a question or ask to explain in ${profile.language}...`}
           style={{
             flex: 1,
-            background: 'var(--bg-tertiary)',
+            background: 'var(--bg-secondary)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-color)',
-            padding: '12px 18px',
-            borderRadius: 'var(--radius-lg)',
-            fontSize: '0.95rem',
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.88rem',
             fontFamily: 'var(--font-main)',
             outline: 'none'
           }}
+          onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-primary)'}
+          onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
         />
 
         {/* Send Button */}
         <button
           onClick={() => handleSend()}
-          className="btn btn-primary"
           style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: 'var(--radius-full)',
-            padding: 0
+            width: '40px',
+            height: '40px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            background: '#2563eb',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ffffff',
+            transition: 'var(--transition-fast)'
           }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
           title="Send Question"
         >
-          <Send size={18} color="#ffffff" />
+          <Send size={16} />
         </button>
       </div>
     </div>

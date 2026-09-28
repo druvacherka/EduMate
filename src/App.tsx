@@ -11,7 +11,7 @@ import { SettingsView } from './components/SettingsView';
 import { fetchStudentProfile } from './services/api';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('tutor');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('analytics');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true);
 

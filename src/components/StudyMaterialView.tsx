@@ -88,8 +88,8 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
 
   return (
     <div style={{
-      padding: '32px',
-      height: 'calc(100vh - 70px)',
+      padding: '28px 36px',
+      height: 'calc(100vh - 56px)',
       overflowY: 'auto',
       display: 'flex',
       flexDirection: 'column',
@@ -107,10 +107,10 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
 
       {/* Page Header */}
       <div>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Database color="var(--accent-cyan)" /> Study Material & Grounded RAG Knowledge
+        <h2 style={{ fontSize: '1.35rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Database size={22} color="#3b82f6" /> Study Material & Grounded RAG Knowledge
         </h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.86rem', marginTop: '4px' }}>
           Upload lecture notes, textbooks, and syllabus PDFs. EduMate chunks, embeds, and grounds all tutoring explanations with strict citations in your materials.
         </p>
       </div>
@@ -123,34 +123,39 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
             onClick={() => fileInputRef.current?.click()}
             className="glass-panel"
             style={{
-              border: '2px dashed var(--border-color-glow)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '36px 24px',
+              border: '1px dashed rgba(37, 99, 235, 0.45)',
+              borderRadius: 'var(--radius-xl)',
+              padding: '32px 24px',
               textAlign: 'center',
               cursor: 'pointer',
-              transition: 'var(--transition-smooth)',
-              background: 'rgba(99, 102, 241, 0.03)'
+              transition: 'var(--transition-fast)',
+              background: 'var(--bg-secondary)'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = '#2563eb'}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.45)'}
           >
             {isUploading ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                <Loader2 size={42} className="spin-slow" color="var(--accent-cyan)" />
-                <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                <Loader2 size={36} className="spin-slow" color="#3b82f6" />
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 600 }}>
                   Parsing & Indexing into Qdrant Vector DB...
                 </span>
               </div>
             ) : (
               <>
-                <UploadCloud size={48} color="var(--accent-primary)" style={{ marginBottom: '12px' }} />
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <UploadCloud size={40} color="#3b82f6" style={{ marginBottom: '10px' }} />
+                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Click to Upload Lecture Notes (PDF)
                 </h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                   Supports PDF files up to 50MB. Text is semantically chunked and indexed into Qdrant Vector Store.
                 </p>
-                <span className="badge badge-lang" style={{ marginTop: '14px' }}>
+                <button
+                  className="btn btn-primary"
+                  style={{ marginTop: '14px', padding: '6px 14px', fontSize: '0.8rem', borderRadius: 'var(--radius-md)' }}
+                >
                   + Choose PDF File
-                </span>
+                </button>
               </>
             )}
           </div>
@@ -178,25 +183,25 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
                   <div
                     key={doc.id}
                     onClick={() => setSelectedDoc(doc)}
-                    className="glass-panel"
                     style={{
-                      padding: '16px',
-                      borderRadius: 'var(--radius-md)',
+                      padding: '14px 16px',
+                      borderRadius: 'var(--radius-lg)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       cursor: 'pointer',
-                      border: selectedDoc?.id === doc.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                      background: selectedDoc?.id === doc.id ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-secondary)'
+                      border: selectedDoc?.id === doc.id ? '1px solid #2563eb' : '1px solid var(--border-color)',
+                      background: selectedDoc?.id === doc.id ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-secondary)',
+                      transition: 'var(--transition-fast)'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <FileText size={28} color="var(--accent-cyan)" />
+                      <FileText size={24} color="#60a5fa" />
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
                           {doc.name}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '12px', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'flex', gap: '10px', marginTop: '2px' }}>
                           <span>{doc.subject}</span>
                           <span>•</span>
                           <span>{doc.pages} Pages</span>
@@ -236,14 +241,22 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
                 RAG Hybrid Search & Vector Chunk Preview
               </h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 {selectedDoc ? selectedDoc.name : 'All Indexed Study Materials'}
               </span>
             </div>
-            <span className="badge badge-lang">
+            <span style={{
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              padding: '3px 8px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent-primary-subtle)',
+              color: '#60a5fa',
+              border: '1px solid rgba(37, 99, 235, 0.25)'
+            }}>
               Dense + BM25 Hybrid Search
             </span>
           </div>
@@ -273,7 +286,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
             <button
               onClick={handleRagSearch}
               className="btn btn-primary"
-              style={{ padding: '0 16px', fontSize: '0.85rem' }}
+              style={{ padding: '0 16px', fontSize: '0.85rem', borderRadius: 'var(--radius-md)' }}
               disabled={isSearching}
             >
               {isSearching ? 'Searching...' : 'Search'}
@@ -287,7 +300,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
                 <div
                   key={idx}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.03)',
+                    background: 'var(--bg-tertiary)',
                     border: '1px solid var(--border-color)',
                     borderRadius: 'var(--radius-md)',
                     padding: '14px'
