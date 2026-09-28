@@ -75,27 +75,18 @@ export interface RagSearchResultItem {
 }
 
 export async function sendSocraticChatMessage(payload: ChatRequestPayload): Promise<ChatResponseData> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/chat/socratic`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+  const res = await fetch(`${API_BASE_URL}/chat/socratic`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 
-    if (!res.ok) {
-      throw new Error(`API error: ${res.statusText}`);
-    }
-
-    return await res.json();
-  } catch (error) {
-    console.warn('Backend API connection failed, using client Socratic fallback:', error);
-    return {
-      response: `I see you are asking about **"${payload.query}"** (${payload.level} level in ${payload.language}).\n\n### 💡 Core Concept\nLet's analyze this step by step.\n\n$$\\mathbf{Complexity:}\\ \\mathcal{O}(\\log n)$$\n\n### 🏢 Real-World Analogy\nImagine searching a telephone dictionary: by splitting remaining pages in half each step, you eliminate 50% of candidate items instantly!\n\nWould you like me to simplify this further or provide an interactive code example?`,
-      level: payload.level,
-      language: payload.language,
-      quick_actions: ['Simplify explanation', 'Give real-world analogy', 'Show code example', 'Test my understanding'],
-    };
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorData.detail || `API error: ${res.statusText}`);
   }
+
+  return await res.json();
 }
 
 export async function fetchStudyMaterials(): Promise<StudyDocument[]> {
@@ -104,39 +95,8 @@ export async function fetchStudyMaterials(): Promise<StudyDocument[]> {
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.warn('Falling back to default study materials:', err);
-    return [
-      {
-        id: 'doc-1',
-        name: 'Data_Structures_Unit3_Trees.pdf',
-        uploadDate: '2026-08-25',
-        size: '2.4 MB',
-        pages: 28,
-        chunks: 84,
-        status: 'Ready',
-        subject: 'Data Structures'
-      },
-      {
-        id: 'doc-2',
-        name: 'DBMS_Unit_2_Normalization.pdf',
-        uploadDate: '2026-08-26',
-        size: '1.8 MB',
-        pages: 18,
-        chunks: 52,
-        status: 'Ready',
-        subject: 'Database Management'
-      },
-      {
-        id: 'doc-3',
-        name: 'Algorithms_Sorting_Searching_Notes.pdf',
-        uploadDate: '2026-08-28',
-        size: '3.1 MB',
-        pages: 35,
-        chunks: 110,
-        status: 'Ready',
-        subject: 'Algorithms'
-      }
-    ];
+    console.warn('Failed to fetch study materials from backend:', err);
+    return [];
   }
 }
 
@@ -145,40 +105,18 @@ export async function uploadStudyDocument(file: File, subject: string = 'Compute
   formData.append('file', file);
   formData.append('subject', subject);
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/materials/upload`, {
-      method: 'POST',
-      body: formData,
-    });
+  const res = await fetch(`${API_BASE_URL}/materials/upload`, {
+    method: 'POST',
+    body: formData,
+  });
 
-    if (!res.ok) {
-      throw new Error(`Upload error: ${res.statusText}`);
-    }
-
-    const data = await res.json();
-    return data.document || {
-      id: `doc-${Date.now()}`,
-      name: file.name,
-      uploadDate: new Date().toISOString().split('T')[0],
-      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-      pages: 12,
-      chunks: 36,
-      status: 'Ready',
-      subject: subject,
-    };
-  } catch (error) {
-    console.warn('Document Upload API fallback:', error);
-    return {
-      id: `doc-${Date.now()}`,
-      name: file.name,
-      uploadDate: new Date().toISOString().split('T')[0],
-      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-      pages: 12,
-      chunks: 36,
-      status: 'Ready',
-      subject: subject,
-    };
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `Upload error: ${res.statusText}`);
   }
+
+  const data = await res.json();
+  return data.document;
 }
 
 export async function deleteStudyDocument(docId: string): Promise<boolean> {
@@ -189,88 +127,38 @@ export async function deleteStudyDocument(docId: string): Promise<boolean> {
     return res.ok;
   } catch (err) {
     console.warn('Delete material error:', err);
-    return true;
+    return false;
   }
 }
 
 export async function generateQuizQuestions(payload: QuizRequestPayload): Promise<QuizSessionData> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/quizzes/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+  const res = await fetch(`${API_BASE_URL}/quizzes/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 
-    if (!res.ok) {
-      throw new Error(`API error: ${res.statusText}`);
-    }
-
-    return await res.json();
-  } catch (error) {
-    console.warn('Backend Quiz API fallback:', error);
-    return {
-      session_id: `quiz-${Date.now()}`,
-      topic: payload.topic,
-      difficulty: payload.difficulty || 'Medium',
-      status: 'ACTIVE',
-      questions: [
-        {
-          id: 'q1',
-          type: 'mcq',
-          topic: payload.topic,
-          difficulty: payload.difficulty || 'Medium',
-          question: `What is the primary advantage of ${payload.topic}?`,
-          options: [
-            'O(1) direct access',
-            'Logarithmic O(log N) search and insertion efficiency',
-            'Linear traversal only',
-            'Zero memory overhead'
-          ],
-          correctAnswer: 1,
-          explanation: `${payload.topic} organizes elements to eliminate half the remaining search space on each comparison.`
-        },
-        {
-          id: 'q2',
-          type: 'tf',
-          topic: payload.topic,
-          difficulty: payload.difficulty || 'Medium',
-          question: `In ${payload.topic}, performance depends directly on structural balance.`,
-          options: ['True', 'False'],
-          correctAnswer: 0,
-          explanation: 'True: When skewed or unbalanced, performance degrades to linear O(N).'
-        }
-      ]
-    };
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `Quiz API error: ${res.statusText}`);
   }
+
+  return await res.json();
 }
 
 export async function submitQuizAnswers(sessionId: string, userAnswers: Record<string, any>): Promise<QuizSubmissionResponse> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/quizzes/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, user_answers: userAnswers }),
-    });
+  const res = await fetch(`${API_BASE_URL}/quizzes/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, user_answers: userAnswers }),
+  });
 
-    if (!res.ok) {
-      throw new Error(`API error: ${res.statusText}`);
-    }
-
-    return await res.json();
-  } catch (error) {
-    console.warn('Fallback quiz submission evaluation:', error);
-    const total = Object.keys(userAnswers).length;
-    return {
-      session_id: sessionId,
-      status: 'EVALUATED',
-      score: total,
-      total_questions: total,
-      percentage: 100,
-      mistakes_count: 0,
-      mistaken_topics: [],
-      results: []
-    };
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `Quiz submission error: ${res.statusText}`);
   }
+
+  return await res.json();
 }
 
 export async function fetchStudentProfile(): Promise<StudentProfile & { subjectProgress?: any[] }> {
@@ -279,18 +167,19 @@ export async function fetchStudentProfile(): Promise<StudentProfile & { subjectP
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.warn('Fallback student profile:', err);
+    console.warn('Could not fetch student profile from backend, using empty state:', err);
     return {
-      name: 'B.Tech Student',
-      email: 'student@edumate.ai',
+      name: 'Student',
+      email: '',
       level: 'Beginner',
       language: 'English',
-      currentSubject: 'Data Structures & Algorithms',
-      currentTopic: 'Binary Search Trees',
-      masteryScore: 78.5,
-      studyStreakDays: 5,
-      weakAreas: ['Tree Balancing', 'Graph Traversals', 'Recurrence Relations'],
-      strongAreas: ['Arrays & HashMaps', 'Sorting Algorithms', 'Stack Operations'],
+      currentSubject: '',
+      currentTopic: '',
+      masteryScore: 0.0,
+      studyStreakDays: 0,
+      weakAreas: [],
+      strongAreas: [],
+      subjectProgress: [],
     };
   }
 }
@@ -305,8 +194,8 @@ export async function updateStudentProfile(settings: { level?: string; language?
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.warn('Fallback settings update:', err);
-    return { status: 'success' };
+    console.warn('Profile settings update failed:', err);
+    return { status: 'error' };
   }
 }
 

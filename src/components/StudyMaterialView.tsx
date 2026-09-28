@@ -161,53 +161,67 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
               Indexed Materials ({documents.length})
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {documents.map((doc) => (
-                <div
-                  key={doc.id}
-                  onClick={() => setSelectedDoc(doc)}
-                  className="glass-panel"
-                  style={{
-                    padding: '16px',
-                    borderRadius: 'var(--radius-md)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    border: selectedDoc?.id === doc.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                    background: selectedDoc?.id === doc.id ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-secondary)'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <FileText size={28} color="var(--accent-cyan)" />
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                        {doc.name}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '12px', marginTop: '2px' }}>
-                        <span>{doc.subject}</span>
-                        <span>•</span>
-                        <span>{doc.pages} Pages</span>
-                        <span>•</span>
-                        <span>{doc.chunks} Chunks</span>
+              {documents.length === 0 ? (
+                <div style={{
+                  padding: '24px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--bg-secondary)',
+                  border: '1px dashed var(--border-color)',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.85rem'
+                }}>
+                  No study materials indexed yet. Click above to upload a PDF lecture note or syllabus to enable grounded RAG citations.
+                </div>
+              ) : (
+                documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    onClick={() => setSelectedDoc(doc)}
+                    className="glass-panel"
+                    style={{
+                      padding: '16px',
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      border: selectedDoc?.id === doc.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: selectedDoc?.id === doc.id ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-secondary)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <FileText size={28} color="var(--accent-cyan)" />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                          {doc.name}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '12px', marginTop: '2px' }}>
+                          <span>{doc.subject}</span>
+                          <span>•</span>
+                          <span>{doc.pages} Pages</span>
+                          <span>•</span>
+                          <span>{doc.chunks} Chunks</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`badge ${doc.status === 'Ready' ? 'badge-beginner' : 'badge-intermediate'}`}>
-                      {doc.status}
-                    </span>
-                    <button
-                      onClick={(e) => handleDelete(doc.id, e)}
-                      className="btn btn-ghost"
-                      style={{ padding: '6px' }}
-                      title="Delete study material"
-                    >
-                      <Trash2 size={16} color="var(--accent-rose)" />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className={`badge ${doc.status === 'Ready' ? 'badge-beginner' : 'badge-intermediate'}`}>
+                        {doc.status}
+                      </span>
+                      <button
+                        onClick={(e) => handleDelete(doc.id, e)}
+                        className="btn btn-ghost"
+                        style={{ padding: '6px' }}
+                        title="Delete study material"
+                      >
+                        <Trash2 size={16} color="var(--accent-rose)" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -291,37 +305,19 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
                 </div>
               ))
             ) : (
-              <>
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '14px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--accent-emerald)', marginBottom: '6px' }}>
-                    <span>Chunk #14 (Page 4)</span>
-                    <span>Cosine Similarity: 0.92</span>
-                  </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    "A Binary Search Tree (BST) is an organized binary tree where each node key is greater than all keys in its left subtree and smaller than all keys in its right subtree."
-                  </p>
-                </div>
-
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '14px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--accent-emerald)', marginBottom: '6px' }}>
-                    <span>Chunk #18 (Page 8)</span>
-                    <span>Cosine Similarity: 0.86</span>
-                  </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    "Deletion in a BST involves three cases: 1) Node is a leaf, 2) Node has one child, 3) Node has two children (replace with in-order successor)."
-                  </p>
-                </div>
-              </>
+              <div style={{
+                padding: '32px 16px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: '0.85rem',
+                border: '1px dashed var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255, 255, 255, 0.01)'
+              }}>
+                {ragSearchQuery.trim()
+                  ? `No chunks retrieved for "${ragSearchQuery}". Try another keyword or upload relevant course notes.`
+                  : 'Enter a search query above to test hybrid semantic retrieval across indexed PDF materials.'}
+              </div>
             )}
           </div>
 

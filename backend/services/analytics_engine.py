@@ -58,16 +58,16 @@ class AnalyticsEngine:
             ]
 
         return {
-            "name": profile.get("name", "B.Tech Student"),
-            "email": profile.get("email", "student@edumate.ai"),
+            "name": profile.get("name", "Student"),
+            "email": profile.get("email", ""),
             "level": profile.get("level", "Beginner"),
             "language": profile.get("language", "English"),
-            "currentSubject": profile.get("current_subject", "Data Structures & Algorithms"),
-            "currentTopic": profile.get("current_topic", "Binary Search Trees"),
-            "masteryScore": round(profile.get("mastery_score", 78.5), 1),
-            "studyStreakDays": profile.get("study_streak_days", 5),
-            "weakAreas": weak_areas or ["Tree Balancing", "Graph Traversals"],
-            "strongAreas": strong_areas or ["Arrays & HashMaps", "Sorting Algorithms"],
+            "currentSubject": profile.get("current_subject", ""),
+            "currentTopic": profile.get("current_topic", ""),
+            "masteryScore": round(profile.get("mastery_score", 0.0), 1),
+            "studyStreakDays": profile.get("study_streak_days", 0),
+            "weakAreas": weak_areas,
+            "strongAreas": strong_areas,
             "subjectProgress": subject_progress,
         }
 

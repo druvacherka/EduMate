@@ -16,16 +16,16 @@ export function App() {
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true);
 
   const [profile, setProfile] = useState<StudentProfile>({
-    name: 'Druva Kumar',
-    email: 'druva@edumate.edu',
+    name: 'Student',
+    email: '',
     level: 'Beginner',
     language: 'English',
-    currentSubject: 'Data Structures & Algorithms',
-    currentTopic: 'Binary Search Trees',
-    masteryScore: 78.5,
-    weakAreas: ['Tree Balancing', 'Graph Traversals', 'Recurrence Relations'],
-    strongAreas: ['Arrays & HashMaps', 'Sorting Algorithms', 'Stack Operations'],
-    studyStreakDays: 5
+    currentSubject: '',
+    currentTopic: '',
+    masteryScore: 0,
+    weakAreas: [],
+    strongAreas: [],
+    studyStreakDays: 0
   });
 
   React.useEffect(() => {

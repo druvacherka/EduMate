@@ -20,12 +20,7 @@ interface AnalyticsViewProps {
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialProfile }) => {
   const [profile, setProfile] = useState<StudentProfile>(initialProfile);
-  const [subjectProgress, setSubjectProgress] = useState<any[]>([
-    { name: 'Data Structures', progress: 85, topicsCompleted: 12, totalTopics: 14, status: 'Strong' },
-    { name: 'Database Management', progress: 72, topicsCompleted: 8, totalTopics: 11, status: 'Moderate' },
-    { name: 'Algorithms', progress: 60, topicsCompleted: 6, totalTopics: 10, status: 'Needs Review' },
-    { name: 'Operating Systems', progress: 45, topicsCompleted: 4, totalTopics: 9, status: 'Needs Review' },
-  ]);
+  const [subjectProgress, setSubjectProgress] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -37,7 +32,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
     try {
       const data = await fetchStudentProfile();
       setProfile(data);
-      if (data.subjectProgress && data.subjectProgress.length > 0) {
+      if (data.subjectProgress) {
         setSubjectProgress(data.subjectProgress);
       }
     } catch (err) {
@@ -80,8 +75,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
           <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '8px' }}>
             {profile.masteryScore}%
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--accent-emerald)', marginTop: '4px' }}>
-            +5% increase this week
+          <div style={{ fontSize: '0.75rem', color: profile.masteryScore > 0 ? 'var(--accent-emerald)' : 'var(--text-muted)', marginTop: '4px' }}>
+            {profile.masteryScore > 0 ? 'Evaluated mastery' : 'No quiz activity recorded'}
           </div>
         </div>
 
@@ -107,7 +102,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
             {profile.strongAreas.length}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {profile.strongAreas.slice(0, 2).join(', ')}
+            {profile.strongAreas.length > 0 ? profile.strongAreas.slice(0, 2).join(', ') : 'None identified yet'}
           </div>
         </div>
 
@@ -120,7 +115,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
             {profile.weakAreas.length}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Requires targeted practice
+            {profile.weakAreas.length > 0 ? 'Requires targeted practice' : 'None identified yet'}
           </div>
         </div>
       </div>
@@ -160,36 +155,50 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
             Subject Mastery & Topic Completion
           </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {subjectProgress.map((subject, idx) => (
-              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{subject.name}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {subject.topicsCompleted}/{subject.totalTopics} Topics ({subject.progress}%)
-                  </span>
-                </div>
-                <div style={{
-                  height: '8px',
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: 'var(--radius-full)',
-                  overflow: 'hidden'
-                }}>
+          {subjectProgress.length === 0 ? (
+            <div style={{
+              padding: '32px 16px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px dashed var(--border-color)',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontSize: '0.85rem'
+            }}>
+              No subject progress tracked yet. Complete topic quizzes to build subject mastery.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {subjectProgress.map((subject, idx) => (
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{subject.name}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {subject.topicsCompleted}/{subject.totalTopics} Topics ({subject.progress}%)
+                    </span>
+                  </div>
                   <div style={{
-                    height: '100%',
-                    width: `${subject.progress}%`,
-                    background: subject.progress > 75 
-                      ? 'var(--accent-emerald)' 
-                      : subject.progress > 50 
-                        ? 'var(--accent-gradient)' 
-                        : 'var(--accent-rose)',
+                    height: '8px',
+                    background: 'var(--bg-tertiary)',
                     borderRadius: 'var(--radius-full)',
-                    transition: 'var(--transition-smooth)'
-                  }} />
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${subject.progress}%`,
+                      background: subject.progress > 75 
+                        ? 'var(--accent-emerald)' 
+                        : subject.progress > 50 
+                          ? 'var(--accent-gradient)' 
+                          : 'var(--accent-rose)',
+                      borderRadius: 'var(--radius-full)',
+                      transition: 'var(--transition-smooth)'
+                    }} />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* AI Recommendations Panel */}
@@ -218,22 +227,38 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
               </div>
             )}
 
-            <div style={{
-              padding: '14px',
-              borderRadius: 'var(--radius-md)',
-              background: 'rgba(16, 185, 129, 0.08)',
-              border: '1px solid rgba(16, 185, 129, 0.25)'
-            }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--accent-emerald)', fontWeight: 700, textTransform: 'uppercase' }}>
-                Priority 2 (Next Advance Topic)
+            {profile.currentTopic ? (
+              <div style={{
+                padding: '14px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.25)'
+              }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--accent-emerald)', fontWeight: 700, textTransform: 'uppercase' }}>
+                  Priority 2 (Next Advance Topic)
+                </div>
+                <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: '4px' }}>
+                  Proceed to {profile.currentTopic}
+                </div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {profile.masteryScore > 0 
+                    ? `Current mastery score: ${profile.masteryScore}% with a ${profile.studyStreakDays}-day streak.`
+                    : 'Start your study session with this topic.'}
+                </p>
               </div>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: '4px' }}>
-                Proceed to {profile.currentTopic}
+            ) : profile.weakAreas.length === 0 ? (
+              <div style={{
+                padding: '24px 16px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px dashed var(--border-color)',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: '0.85rem'
+              }}>
+                Take your first quiz or start a tutoring session to generate personalized recommendations.
               </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                You have maintained a {profile.studyStreakDays}-day streak with {profile.masteryScore}% mastery!
-              </p>
-            </div>
+            ) : null}
           </div>
         </div>
       </div>

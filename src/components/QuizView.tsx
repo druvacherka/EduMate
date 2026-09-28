@@ -25,57 +25,28 @@ interface QuizViewProps {
 }
 
 export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
-  const [topic, setTopic] = useState(profile.currentTopic || 'Binary Search Trees');
+  const [topic, setTopic] = useState(profile.currentTopic || '');
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [sessionId, setSessionId] = useState<string>('quiz-default');
-  const [questions, setQuestions] = useState<QuizQuestionData[]>([
-    {
-      id: 'q1',
-      type: 'mcq',
-      topic: 'Binary Search Tree',
-      difficulty: 'Easy',
-      question: 'What is the average time complexity for searching an element in a balanced Binary Search Tree?',
-      options: ['O(1)', 'O(log N)', 'O(N)', 'O(N log N)'],
-      correctAnswer: 1,
-      explanation: 'Because half of the nodes are eliminated at each comparison level, the search time complexity is logarithmic O(log N).'
-    },
-    {
-      id: 'q2',
-      type: 'tf',
-      topic: 'Binary Search Tree',
-      difficulty: 'Medium',
-      question: 'True or False: An In-Order Traversal of a Binary Search Tree always yields keys in ascending sorted order.',
-      options: ['True', 'False'],
-      correctAnswer: 0,
-      explanation: 'True! In-Order traversal visits Left Subtree -> Root -> Right Subtree, which processes keys in non-decreasing order.'
-    },
-    {
-      id: 'q3',
-      type: 'mcq',
-      topic: 'BST Deletion',
-      difficulty: 'Hard',
-      question: 'When deleting a node with TWO children in a BST, which node can replace the deleted node to maintain BST properties?',
-      options: [
-        'Root Node',
-        'In-Order Successor (Smallest node in right subtree)',
-        'Largest node in left subtree only',
-        'Any random leaf node'
-      ],
-      correctAnswer: 1,
-      explanation: 'You can replace it with either the In-Order Successor (minimum in right subtree) or In-Order Predecessor (maximum in left subtree).'
-    }
-  ]);
+  const [sessionId, setSessionId] = useState<string>('');
+  const [questions, setQuestions] = useState<QuizQuestionData[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: any }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<QuizSubmissionResponse | null>(null);
 
-  const currentQ = questions[currentIndex] || questions[0];
+  const currentQ = questions[currentIndex] || null;
 
   const handleGenerateQuiz = async () => {
+    if (!topic.trim()) {
+      setError('Please specify a topic to generate a quiz.');
+      return;
+    }
+
     setIsGenerating(true);
+    setError(null);
     try {
       const data = await generateQuizQuestions({
         topic,
@@ -83,29 +54,33 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
         num_questions: 3,
       });
       setSessionId(data.session_id);
-      setQuestions(data.questions);
+      setQuestions(data.questions || []);
       setCurrentIndex(0);
       setSelectedAnswers({});
       setSubmissionResult(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Quiz generation failed:', err);
+      setError(err.message || 'Failed to generate quiz. Please verify backend connection.');
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleOptionSelect = (optionIdx: number) => {
-    if (submissionResult) return;
+    if (submissionResult || !currentQ) return;
     setSelectedAnswers(prev => ({ ...prev, [currentQ.id]: optionIdx }));
   };
 
   const handleSubmitQuiz = async () => {
+    if (!sessionId) return;
     setIsSubmitting(true);
+    setError(null);
     try {
       const result = await submitQuizAnswers(sessionId, selectedAnswers);
       setSubmissionResult(result);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Quiz submission failed:', err);
+      setError(err.message || 'Failed to evaluate quiz submission.');
     } finally {
       setIsSubmitting(false);
     }
@@ -194,8 +169,57 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
         </button>
       </div>
 
+      {/* Error Alert Banner */}
+      {error && (
+        <div style={{
+          padding: '14px 18px',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          color: 'var(--accent-rose)',
+          fontSize: '0.9rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          <AlertTriangle size={18} />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* Main Quiz Taking Interface or Result Screen */}
-      {!submissionResult ? (
+      {questions.length === 0 ? (
+        <div className="glass-panel" style={{
+          padding: '48px 24px',
+          borderRadius: 'var(--radius-xl)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          gap: '16px'
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: 'var(--radius-full)',
+            background: 'rgba(99, 102, 241, 0.1)',
+            border: '1px solid var(--border-color-glow)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--accent-primary)'
+          }}>
+            <Award size={32} />
+          </div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            No Active Quiz Session
+          </h3>
+          <p style={{ maxWidth: '480px', fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Enter a topic in the field above (e.g. "Binary Search Trees", "Database Normalization") and click "Generate AI Quiz" to start practicing.
+          </p>
+        </div>
+      ) : !submissionResult && currentQ ? (
         <div className="glass-panel" style={{
           padding: '32px',
           borderRadius: 'var(--radius-xl)',

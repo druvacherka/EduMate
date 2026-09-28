@@ -35,8 +35,8 @@ def init_db() -> None:
                 language TEXT NOT NULL DEFAULT 'English',
                 current_subject TEXT NOT NULL DEFAULT 'Data Structures & Algorithms',
                 current_topic TEXT NOT NULL DEFAULT 'Binary Search Trees',
-                mastery_score REAL NOT NULL DEFAULT 78.5,
-                study_streak_days INTEGER NOT NULL DEFAULT 5,
+                mastery_score REAL NOT NULL DEFAULT 0.0,
+                study_streak_days INTEGER NOT NULL DEFAULT 0,
                 last_active_date TEXT NOT NULL
             );
         """)
@@ -106,7 +106,7 @@ def init_db() -> None:
             );
         """)
 
-        # Seed default profile if empty
+        # Initialize default profile if empty with 0.0 initial mastery and 0 streak
         cursor.execute("SELECT COUNT(*) AS cnt FROM student_profile;")
         if cursor.fetchone()["cnt"] == 0:
             cursor.execute("""
@@ -114,62 +114,10 @@ def init_db() -> None:
                     id, name, email, level, language, current_subject, current_topic,
                     mastery_score, study_streak_days, last_active_date
                 ) VALUES (
-                    1, 'B.Tech Student', 'student@edumate.ai', 'Beginner', 'English',
-                    'Data Structures & Algorithms', 'Binary Search Trees', 78.5, 5, ?
+                    1, 'Student', 'student@edumate.ai', 'Beginner', 'English',
+                    'Computer Science', '', 0.0, 0, ?
                 );
             """, (date.today().isoformat(),))
-
-        # Seed initial study materials if empty
-        cursor.execute("SELECT COUNT(*) AS cnt FROM study_materials;")
-        if cursor.fetchone()["cnt"] == 0:
-            sample_docs = [
-                ("doc-1", "Data_Structures_Unit3_Trees.pdf", "Data Structures", "2026-08-25", "2.4 MB", 28, 84, "Ready"),
-                ("doc-2", "DBMS_Unit_2_Normalization.pdf", "Database Management", "2026-08-26", "1.8 MB", 18, 52, "Ready"),
-                ("doc-3", "Algorithms_Sorting_Searching_Notes.pdf", "Algorithms", "2026-08-28", "3.1 MB", 35, 110, "Ready"),
-            ]
-            cursor.executemany("""
-                INSERT INTO study_materials (id, name, subject, upload_date, size_str, pages, chunks, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-            """, sample_docs)
-
-        # Seed initial weak & strong areas if empty
-        cursor.execute("SELECT COUNT(*) AS cnt FROM weak_areas;")
-        if cursor.fetchone()["cnt"] == 0:
-            initial_weak = [
-                ("Tree Balancing", "Data Structures", 3, date.today().isoformat()),
-                ("Graph Traversals", "Algorithms", 2, date.today().isoformat()),
-                ("Recurrence Relations", "Algorithms", 4, date.today().isoformat()),
-            ]
-            cursor.executemany("""
-                INSERT INTO weak_areas (topic, subject, mistake_count, last_mistake_date)
-                VALUES (?, ?, ?, ?);
-            """, initial_weak)
-
-        cursor.execute("SELECT COUNT(*) AS cnt FROM strong_areas;")
-        if cursor.fetchone()["cnt"] == 0:
-            initial_strong = [
-                ("Arrays & HashMaps", "Data Structures", 5),
-                ("Sorting Algorithms", "Algorithms", 4),
-                ("Stack Operations", "Data Structures", 6),
-            ]
-            cursor.executemany("""
-                INSERT INTO strong_areas (topic, subject, success_count)
-                VALUES (?, ?, ?);
-            """, initial_strong)
-
-        # Seed initial subject progress if empty
-        cursor.execute("SELECT COUNT(*) AS cnt FROM subject_progress;")
-        if cursor.fetchone()["cnt"] == 0:
-            initial_progress = [
-                ("Data Structures", 85, 12, 14, "Strong"),
-                ("Database Management", 72, 8, 11, "Moderate"),
-                ("Algorithms", 60, 6, 10, "Needs Review"),
-                ("Operating Systems", 45, 4, 9, "Needs Review"),
-            ]
-            cursor.executemany("""
-                INSERT INTO subject_progress (subject_name, progress, topics_completed, total_topics, status)
-                VALUES (?, ?, ?, ?, ?);
-            """, initial_progress)
 
         conn.commit()
 
@@ -244,5 +192,25 @@ def delete_study_material(doc_id: str) -> bool:
         return cursor.rowcount > 0
 
 
+def reset_db_to_baseline() -> None:
+    """Clear all dynamic session and study data to clean empty state."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM study_materials;")
+        cursor.execute("DELETE FROM weak_areas;")
+        cursor.execute("DELETE FROM strong_areas;")
+        cursor.execute("DELETE FROM subject_progress;")
+        cursor.execute("DELETE FROM quiz_sessions;")
+        cursor.execute("""
+            UPDATE student_profile
+            SET name = 'Student', email = '', level = 'Beginner', language = 'English',
+                current_subject = '', current_topic = '', mastery_score = 0.0,
+                study_streak_days = 0
+            WHERE id = 1;
+        """)
+        conn.commit()
+
+
 # Call init_db on module import
 init_db()
+

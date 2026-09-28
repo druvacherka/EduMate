@@ -227,7 +227,7 @@ class QuizStateMachine:
             "total_questions": total,
             "percentage": pct,
             "mistakes_count": total - score,
-            "mistaken_topics": ["Tree Balancing"] if pct < 100 else [],
+            "mistaken_topics": [],
             "results": [],
         }
 

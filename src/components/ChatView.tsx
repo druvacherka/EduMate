@@ -13,7 +13,9 @@ import {
   Code, 
   CheckCircle2,
   FileText,
-  Lightbulb
+  Lightbulb,
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
 
 interface ChatViewProps {
@@ -22,56 +24,21 @@ interface ChatViewProps {
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      sender: 'tutor',
-      text: `Hello ${profile.name}! I'm EduMate, your AI Personal Tutor. We are currently focusing on **${profile.currentSubject}** (${profile.currentTopic}).\n\nHow would you like to start today? You can ask a question, request a step-by-step concept breakdown, or ask me to explain based on your uploaded notes!`,
-      timestamp: '10:00 AM',
-      level: profile.level,
-      language: profile.language,
-      quickActions: ['Explain BST Fundamentals', 'Give a real-world analogy', 'Test me with a problem']
-    },
-    {
-      id: '2',
-      sender: 'student',
-      text: 'What is a Binary Search Tree (BST) and why is the left child always smaller?',
-      timestamp: '10:01 AM'
-    },
-    {
-      id: '3',
-      sender: 'tutor',
-      text: `Great question! Let's understand **Binary Search Trees (BST)** step-by-step for the **${profile.level}** level.\n\n### 💡 Core Concept\nA Binary Search Tree is a hierarchical node structure where every node follows one strict ordering rule:\n- **Left Subtree Rule**: Every value in the left subtree is strictly **smaller** than the root value.\n- **Right Subtree Rule**: Every value in the right subtree is strictly **greater** than the root value.\n\n### 🏢 Real-World Analogy\nThink of a dictionary! If you look for words starting with **"M"**, and you open a page at **"P"**, you immediately know that "M" must be in the **left half** of the book. You can ignore the entire right half! That is why search operation takes $O(\\log N)$ time on average.`,
-      timestamp: '10:01 AM',
-      level: profile.level,
-      language: profile.language,
-      isAudio: true,
-      formula: 'T(n) = T(n/2) + O(1) \\implies O(\\log n)',
-      codeSnippet: {
-        language: 'cpp',
-        code: `struct Node {\n    int data;\n    Node* left;\n    Node* right;\n    Node(int val) : data(val), left(nullptr), right(nullptr) {}\n};`
-      },
-      documentRef: {
-        name: 'Data_Structures_Unit3_Trees.pdf',
-        page: 14,
-        snippet: 'A BST satisfies the binary-search property: let x be a node. If y is in left subtree of x, then y.key <= x.key.'
-      },
-      quickActions: ['Explain simpler', 'Show BST Insertion Example', 'Give me a practice quiz']
-    }
-  ]);
-
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const query = textToSend || inputText;
-    if (!query.trim()) return;
+    if (!query.trim() || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -82,14 +49,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
 
     setMessages(prev => [...prev, userMsg]);
     if (!textToSend) setInputText('');
+    setIsLoading(true);
 
-    // Call Socratic AI Tutor API Gateway
-    sendSocraticChatMessage({
-      query,
-      level: profile.level,
-      language: profile.language,
-      conversation_history: messages.map(m => ({ sender: m.sender, text: m.text }))
-    }).then(res => {
+    try {
+      const res = await sendSocraticChatMessage({
+        query,
+        level: profile.level,
+        language: profile.language,
+        conversation_history: messages.map(m => ({ sender: m.sender, text: m.text }))
+      });
+
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'tutor',
@@ -103,22 +72,76 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
       };
 
       setMessages(prev => [...prev, aiMsg]);
-    });
+    } catch (err: any) {
+      const errorMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'tutor',
+        text: `⚠️ **Connection Error**: ${err.message || 'Unable to connect to the EduMate AI service.'}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        level: profile.level,
+        language: profile.language,
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-
   const toggleRecording = () => {
-    if (!isRecording) {
-      setIsRecording(true);
-      setSpeechTranscript('Listening to your speech...');
-      const speechSimulation = setTimeout(() => {
-        setSpeechTranscript('Explain BST deletion step by step');
-        setIsRecording(false);
-        handleSend('Explain BST deletion step by step');
-      }, 3000);
-    } else {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
       setIsRecording(false);
       setSpeechTranscript('');
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechTranscript('Web Speech API is not supported in this browser. Please type your query.');
+      setTimeout(() => setSpeechTranscript(''), 3000);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = profile.language === 'Telugu' ? 'te-IN' : profile.language === 'Hindi' ? 'hi-IN' : 'en-US';
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        setSpeechTranscript('Listening to your speech...');
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join('');
+        setSpeechTranscript(transcript);
+        setInputText(transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsRecording(false);
+        setSpeechTranscript(`Microphone error: ${event.error}`);
+        setTimeout(() => setSpeechTranscript(''), 3000);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        setSpeechTranscript('');
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.error('Failed to start speech recognition:', err);
+      setIsRecording(false);
+      setSpeechTranscript('Could not access microphone.');
+      setTimeout(() => setSpeechTranscript(''), 3000);
     }
   };
 
@@ -140,7 +163,40 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
         flexDirection: 'column',
         gap: '20px'
       }}>
-        {messages.map((msg) => (
+        {messages.length === 0 ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            textAlign: 'center',
+            padding: '40px 20px',
+            color: 'var(--text-secondary)'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: 'var(--radius-xl)',
+              background: 'rgba(99, 102, 241, 0.1)',
+              border: '1px solid var(--border-color-glow)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px',
+              color: 'var(--accent-primary)'
+            }}>
+              <Sparkles size={32} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Welcome to EduMate AI Tutor
+            </h3>
+            <p style={{ maxWidth: '520px', fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-muted)' }}>
+              No conversation history yet. Ask a conceptual question, request a step-by-step breakdown, or speak via your microphone to start your interactive Socratic tutoring session.
+            </p>
+          </div>
+        ) : (
+          messages.map((msg) => (
           <div
             key={msg.id}
             style={{
@@ -355,7 +411,25 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
               </div>
             )}
           </div>
-        ))}
+        ))
+        )}
+        {isLoading && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-full)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            fontSize: '0.8rem',
+            color: 'var(--text-muted)',
+            alignSelf: 'flex-start'
+          }}>
+            <Loader2 size={14} className="spin-slow" color="var(--accent-primary)" />
+            <span>EduMate is formulating your Socratic response...</span>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
