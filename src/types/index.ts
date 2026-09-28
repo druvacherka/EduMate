@@ -29,6 +29,10 @@ export interface ChatMessage {
     code: string;
   };
   formula?: string;
+  citations?: Array<{
+    document_name: string;
+    page_number: number;
+  }>;
 }
 
 export interface StudyDocument {

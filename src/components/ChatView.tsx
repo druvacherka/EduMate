@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, StudentProfile } from '../types';
+import { sendSocraticChatMessage } from '../services/api';
 import { 
   Send, 
   Mic, 
@@ -82,34 +83,29 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
     setMessages(prev => [...prev, userMsg]);
     if (!textToSend) setInputText('');
 
-    // Simulate Socratic AI Tutor Response
-    setTimeout(() => {
-      let aiResponseText = '';
-      let codeSnippet;
-      let formula;
-
-      if (query.toLowerCase().includes('simpler') || query.toLowerCase().includes('easy')) {
-        aiResponseText = `Here is a **simpler view**:\n\nImagine a line of students arranged by height. The teacher stands in the middle. Everyone shorter goes to the left line, and everyone taller goes to the right line!\n\nIf you want to find a student, you only look at one line. That halves your work every step!`;
-      } else if (query.toLowerCase().includes('quiz') || query.toLowerCase().includes('test')) {
-        aiResponseText = `Awesome! Let's test your understanding:\n\n**Question**: If we insert values \`[50, 30, 70, 20, 40]\` into an empty BST, which node becomes the right child of 30?`;
-      } else {
-        aiResponseText = `I understand you're asking about **"${query}"**.\n\nConsidering your level (**${profile.level}**) and target language (**${profile.language}**), let's break this down:\n1. **Fundamental Rule**: We maintain sorted structure upon insertion.\n2. **Key Advantage**: Searching takes logarithmic time $O(\\log N)$.\n\nWould you like an example problem or a step-by-step code demonstration?`;
-      }
-
+    // Call Socratic AI Tutor API Gateway
+    sendSocraticChatMessage({
+      query,
+      level: profile.level,
+      language: profile.language,
+      conversation_history: messages.map(m => ({ sender: m.sender, text: m.text }))
+    }).then(res => {
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'tutor',
-        text: aiResponseText,
+        text: res.response,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         level: profile.level,
         language: profile.language,
         isAudio: isVoiceActive,
-        quickActions: ['Explain simpler', 'Give another example', 'Test me with a quiz']
+        quickActions: res.quick_actions || ['Explain simpler', 'Give another example', 'Test me with a quiz'],
+        citations: res.citations?.map(c => ({ document_name: c.document_name, page_number: c.page_number }))
       };
 
       setMessages(prev => [...prev, aiMsg]);
-    }, 800);
+    });
   };
+
 
   const toggleRecording = () => {
     if (!isRecording) {
@@ -271,6 +267,66 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
                       "{msg.documentRef.snippet}"
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Verified Study Material Grounding Citations */}
+              {msg.citations && msg.citations.length > 0 && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '10px 14px',
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  fontSize: '0.8rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-emerald)', fontWeight: 600 }}>
+                    <CheckCircle2 size={15} />
+                    <span>Verified Study Material Citations ({msg.citations.length})</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                    {msg.citations.map((cit, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          borderRadius: 'var(--radius-full)',
+                          padding: '3px 10px',
+                          fontSize: '0.75rem',
+                          color: 'var(--accent-emerald)',
+                        }}
+                      >
+                        <FileText size={12} />
+                        {cit.document_name} • Page {cit.page_number}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Ungrounded Fallback Alert */}
+              {msg.text.includes("Information not found in study material") && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '8px 12px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.8rem',
+                  color: 'var(--accent-rose)',
+                }}>
+                  <HelpCircle size={16} />
+                  <span>Document Grounding Alert: Topic not found in uploaded study material.</span>
                 </div>
               )}
             </div>
