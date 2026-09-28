@@ -14,6 +14,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('analytics');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
   const [profile, setProfile] = useState<StudentProfile>({
     name: 'Student',
@@ -34,6 +35,10 @@ export function App() {
     });
   }, []);
 
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(prev => !prev);
+  };
+
   return (
     <div className="app-container" data-theme={theme}>
       {/* Sidebar Navigation */}
@@ -41,6 +46,8 @@ export function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         profile={profile}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
       />
 
       {/* Main Content Workspace */}
@@ -52,6 +59,8 @@ export function App() {
           setTheme={setTheme}
           isVoiceActive={isVoiceActive}
           setIsVoiceActive={setIsVoiceActive}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
         />
 
         <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>

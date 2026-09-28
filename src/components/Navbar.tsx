@@ -8,7 +8,8 @@ import {
   VolumeX,
   Search,
   Flame,
-  Coins
+  Coins,
+  PanelLeftOpen
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -18,6 +19,8 @@ interface NavbarProps {
   setTheme: (theme: 'dark' | 'light') => void;
   isVoiceActive: boolean;
   setIsVoiceActive: (active: boolean) => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,7 +29,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   theme,
   setTheme,
   isVoiceActive,
-  setIsVoiceActive
+  setIsVoiceActive,
+  isSidebarCollapsed = false,
+  onToggleSidebar
 }) => {
   const subjects = [
     { subject: 'Computer Science', topic: 'Select Topic' },
@@ -74,6 +79,25 @@ export const Navbar: React.FC<NavbarProps> = ({
     }}>
       {/* Left Topic/Subject Selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {isSidebarCollapsed && onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="btn btn-ghost"
+            style={{
+              padding: '6px',
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+          >
+            <PanelLeftOpen size={18} color="#60a5fa" />
+          </button>
+        )}
         <div style={{
           display: 'flex',
           alignItems: 'center',

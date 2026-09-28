@@ -8,6 +8,7 @@ import {
   Settings, 
   GraduationCap, 
   PanelLeftClose,
+  PanelLeftOpen,
   ChevronDown,
   ChevronUp,
   FileText,
@@ -20,9 +21,17 @@ interface SidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   profile: StudentProfile;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ 
+  activeTab, 
+  setActiveTab, 
+  profile,
+  isCollapsed = false,
+  onToggleCollapse 
+}) => {
   const getInitials = (name: string) => {
     if (!name || name === 'Student') return 'CD';
     const parts = name.trim().split(/\s+/);
@@ -40,68 +49,89 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
 
   return (
     <aside style={{
-      width: '240px',
+      width: isCollapsed ? '68px' : '240px',
+      minWidth: isCollapsed ? '68px' : '240px',
       height: '100%',
       backgroundColor: 'var(--bg-sidebar)',
       borderRight: '1px solid var(--border-color)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
-      padding: '16px 12px',
+      padding: isCollapsed ? '16px 8px' : '16px 12px',
       zIndex: 10,
-      userSelect: 'none'
+      userSelect: 'none',
+      transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.2s ease',
+      overflow: 'hidden'
     }}>
       <div>
         {/* Brand Header */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '4px 8px 18px 8px',
-          borderBottom: '1px solid var(--border-subtle)'
+          justifyContent: isCollapsed ? 'center' : 'space-between',
+          padding: isCollapsed ? '4px 0 16px 0' : '4px 8px 18px 8px',
+          borderBottom: '1px solid var(--border-subtle)',
+          minHeight: '44px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '6px',
-              background: 'var(--accent-primary)',
+          {!isCollapsed && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                background: 'var(--accent-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                flexShrink: 0
+              }}>
+                <GraduationCap size={16} />
+              </div>
+              <span style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
+                Edu<span style={{ color: '#60a5fa' }}>Mate</span>
+              </span>
+            </div>
+          )}
+          <button
+            onClick={onToggleCollapse}
+            className="btn btn-ghost"
+            style={{ 
+              padding: '6px', 
+              color: 'var(--text-muted)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ffffff'
-            }}>
-              <GraduationCap size={16} />
-            </div>
-            <span style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
-              Edu<span style={{ color: '#60a5fa' }}>Mate</span>
-            </span>
-          </div>
-          <button
-            className="btn btn-ghost"
-            style={{ padding: '4px', color: 'var(--text-muted)' }}
-            title="Toggle sidebar"
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            <PanelLeftClose size={16} />
+            {isCollapsed ? <PanelLeftOpen size={18} color="#60a5fa" /> : <PanelLeftClose size={16} />}
           </button>
         </div>
 
         {/* Section: Prep & Learn */}
         <div style={{ marginTop: '16px' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '4px 8px',
-            fontSize: '0.72rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            color: 'var(--text-muted)',
-            letterSpacing: '0.5px'
-          }}>
-            <span>Prep</span>
-            <ChevronUp size={14} />
-          </div>
+          {!isCollapsed ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '4px 8px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+              letterSpacing: '0.5px'
+            }}>
+              <span>Prep</span>
+              <ChevronUp size={14} />
+            </div>
+          ) : (
+            <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '4px 6px 8px 6px' }} />
+          )}
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
             {navItems.slice(0, 3).map((item) => {
@@ -111,12 +141,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
+                  title={item.label}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: isCollapsed ? 'center' : 'flex-start',
                     gap: '10px',
                     width: '100%',
-                    padding: '8px 10px',
+                    padding: isCollapsed ? '10px 0' : '8px 10px',
                     borderRadius: 'var(--radius-md)',
                     border: 'none',
                     background: isActive ? 'var(--accent-primary-subtle)' : 'transparent',
@@ -134,19 +166,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
                     if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <Icon size={16} color={isActive ? '#3b82f6' : 'var(--text-muted)'} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.badge && (
-                    <span style={{
-                      fontSize: '0.62rem',
-                      padding: '1px 6px',
-                      borderRadius: 'var(--radius-full)',
-                      background: 'rgba(37, 99, 235, 0.25)',
-                      color: '#60a5fa',
-                      fontWeight: 700
-                    }}>
-                      {item.badge}
-                    </span>
+                  <Icon size={17} color={isActive ? '#3b82f6' : 'var(--text-muted)'} style={{ flexShrink: 0 }} />
+                  {!isCollapsed && (
+                    <>
+                      <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                      {item.badge && (
+                        <span style={{
+                          fontSize: '0.62rem',
+                          padding: '1px 6px',
+                          borderRadius: 'var(--radius-full)',
+                          background: 'rgba(37, 99, 235, 0.25)',
+                          color: '#60a5fa',
+                          fontWeight: 700
+                        }}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </>
                   )}
                 </button>
               );
@@ -156,20 +192,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
 
         {/* Section: Materials & RAG */}
         <div style={{ marginTop: '16px' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '4px 8px',
-            fontSize: '0.72rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            color: 'var(--text-muted)',
-            letterSpacing: '0.5px'
-          }}>
-            <span>Knowledge</span>
-            <ChevronUp size={14} />
-          </div>
+          {!isCollapsed ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '4px 8px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+              letterSpacing: '0.5px'
+            }}>
+              <span>Knowledge</span>
+              <ChevronUp size={14} />
+            </div>
+          ) : (
+            <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '8px 6px' }} />
+          )}
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
             {navItems.slice(3).map((item) => {
@@ -179,12 +219,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
+                  title={item.label}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: isCollapsed ? 'center' : 'flex-start',
                     gap: '10px',
                     width: '100%',
-                    padding: '8px 10px',
+                    padding: isCollapsed ? '10px 0' : '8px 10px',
                     borderRadius: 'var(--radius-md)',
                     border: 'none',
                     background: isActive ? 'var(--accent-primary-subtle)' : 'transparent',
@@ -202,8 +244,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
                     if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <Icon size={16} color={isActive ? '#3b82f6' : 'var(--text-muted)'} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <Icon size={17} color={isActive ? '#3b82f6' : 'var(--text-muted)'} style={{ flexShrink: 0 }} />
+                  {!isCollapsed && (
+                    <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                  )}
                 </button>
               );
             })}
@@ -212,18 +256,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
       </div>
 
       {/* Bottom Profile Footer matching reference image */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '10px 8px',
-        borderRadius: 'var(--radius-md)',
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--border-subtle)',
-        cursor: 'pointer'
-      }}
-      onClick={() => setActiveTab('settings')}
-      title="Open Profile Settings"
+      <div 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: isCollapsed ? 'center' : 'flex-start',
+          gap: '10px',
+          padding: isCollapsed ? '8px 0' : '10px 8px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border-subtle)',
+          cursor: 'pointer',
+          transition: 'var(--transition-fast)'
+        }}
+        onClick={() => setActiveTab('settings')}
+        title={isCollapsed ? (profile.name || 'Student') : "Open Profile Settings"}
       >
         <div style={{
           width: '32px',
@@ -236,30 +283,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, profi
           justifyContent: 'center',
           fontSize: '0.72rem',
           fontWeight: 700,
-          color: 'var(--text-primary)'
+          color: 'var(--text-primary)',
+          flexShrink: 0
         }}>
           {getInitials(profile.name)}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: '0.82rem',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
-          }}>
-            {profile.name || 'Student'}
+        {!isCollapsed && (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {profile.name || 'Student'}
+            </div>
+            <div style={{
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              letterSpacing: '0.4px'
+            }}>
+              PLUS CORE
+            </div>
           </div>
-          <div style={{
-            fontSize: '0.65rem',
-            fontWeight: 700,
-            color: 'var(--text-muted)',
-            letterSpacing: '0.4px'
-          }}>
-            PLUS CORE
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   );
