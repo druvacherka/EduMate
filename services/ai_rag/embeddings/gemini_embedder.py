@@ -77,6 +77,10 @@ class GeminiEmbedder:
 
         return self._generate_fallback_vector(text)
 
+    def embed_query(self, text: str) -> List[float]:
+        """Generate a single 768-dimensional vector embedding for a query string."""
+        return self.embed_text(text)
+
     def embed_chunks(self, chunks: List[TextChunk]) -> BatchEmbeddingResult:
         """Batch process a list of TextChunk objects into 768-dim vector embeddings.
 
