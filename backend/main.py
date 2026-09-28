@@ -10,9 +10,13 @@ from backend.schemas import (
     SocraticChatResponse,
     QuizGenerationRequest,
     QuizQuestionSchema,
+    QuizSubmissionRequest,
+    QuizSubmissionResponse,
     AnalyticsProfileResponse,
     RagSearchRequest,
     RagSearchResponse,
+    StudyMaterialItem,
+    UpdateProfileRequest,
 )
 
 # Import AI & RAG Engine Services
@@ -26,6 +30,16 @@ from services.ai_rag.vector_store.qdrant_client import qdrant_store
 from services.ai_rag.vector_store.hybrid_search import HybridSearchEngine
 from services.ai_rag.schemas.vector_schemas import HybridSearchQuery, SearchResult, SearchQuery
 from services.ai_rag.embeddings import gemini_embedder
+
+# Import Backend Database & Engine Services
+from backend.database import (
+    list_study_materials,
+    insert_study_material,
+    delete_study_material,
+    update_student_settings,
+)
+from backend.services.quiz_engine import quiz_state_machine
+from backend.services.analytics_engine import analytics_engine
 
 hybrid_search_engine = HybridSearchEngine(vector_store=qdrant_store)
 grounded_prompt_builder = GroundedPromptBuilder()
@@ -165,30 +179,37 @@ async def generate_socratic_chat(req: SocraticChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate tutor response: {str(e)}")
 
-@app.post("/api/quizzes/generate", response_model=List[QuizQuestionSchema])
-async def generate_quiz(req: QuizGenerationRequest):
-    """Generate structured AI quiz questions based on target topic and difficulty."""
-    try:
-        questions = await llm_client.generate_structured_quiz(
-            topic=req.topic,
-            num_questions=req.num_questions,
-            difficulty=req.difficulty
-        )
-        return questions
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate quiz: {str(e)}")
+# ==========================================
+# Study Materials CRUD Endpoints
+# ==========================================
 
-@app.get("/api/analytics/profile", response_model=AnalyticsProfileResponse)
-async def get_student_profile():
-    """Retrieve student mastery score, streak, and weak area analytics."""
-    return AnalyticsProfileResponse()
+@app.get("/api/materials", response_model=List[StudyMaterialItem])
+async def get_study_materials():
+    """Retrieve all uploaded and indexed PDF study materials from persistent SQLite DB."""
+    try:
+        materials = list_study_materials()
+        return [
+            StudyMaterialItem(
+                id=m["id"],
+                name=m["name"],
+                subject=m["subject"],
+                uploadDate=m["upload_date"],
+                size=m["size_str"],
+                pages=m["pages"],
+                chunks=m["chunks"],
+                status=m["status"],
+            )
+            for m in materials
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch materials: {str(e)}")
 
 @app.post("/api/materials/upload")
 async def upload_study_material(
     file: UploadFile = File(...),
-    subject: str = Form("Computer Science")
+    subject: str = Form("Computer Science"),
 ):
-    """Upload PDF study material, parse page content, split chunks, and index in Qdrant."""
+    """Upload PDF, extract content, chunk text, embed vectors, index in Qdrant, and save to DB."""
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
@@ -200,22 +221,111 @@ async def upload_study_material(
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
+        size_bytes = os.path.getsize(temp_path)
+        size_str = f"{round(size_bytes / (1024 * 1024), 1)} MB" if size_bytes > 1024 * 1024 else f"{round(size_bytes / 1024, 1)} KB"
+
         # 1. Parse PDF using PyMuPDF engine
         extracted_doc = pdf_parser.extract_pdf_content(temp_path)
-        
-        # 2. Chunk text using header-aware recursive chunker
+
+        # 2. Chunk text using recursive header-aware chunker
         chunk_documents = text_chunker.chunk_document(extracted_doc)
+
+        # 3. Batch embed chunks using Gemini Embeddings
+        embed_result = gemini_embedder.embed_chunks(chunk_documents.chunks)
+
+        # 4. Upsert vectors into Qdrant collection
+        if chunk_documents.chunks and embed_result.vectors:
+            qdrant_store.upsert_chunks(
+                chunks=chunk_documents.chunks,
+                vectors=embed_result.vectors,
+                document_name=file.filename,
+                subject=subject,
+            )
+
+        # 5. Persist record in SQLite database
+        doc_id = f"doc-{uuid.uuid4().hex[:6]}"
+        saved_record = insert_study_material(
+            doc_id=doc_id,
+            name=file.filename,
+            subject=subject,
+            size_str=size_str,
+            pages=extracted_doc.total_pages,
+            chunks=len(chunk_documents.chunks),
+            status="Ready",
+        )
 
         return {
             "status": "success",
-            "filename": file.filename,
-            "subject": subject,
-            "totalPages": extracted_doc.total_pages,
-            "totalChunks": len(chunk_documents),
-            "message": f"Successfully parsed and chunked '{file.filename}' into {len(chunk_documents)} semantic vectors."
+            "document": saved_record,
+            "message": f"Successfully parsed, embedded, and indexed '{file.filename}'.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process study material: {str(e)}")
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+@app.delete("/api/materials/{doc_id}")
+async def remove_study_material(doc_id: str):
+    """Delete study material record from database."""
+    success = delete_study_material(doc_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Study material not found.")
+    return {"status": "success", "deleted_id": doc_id}
+
+# ==========================================
+# Quiz State Machine Endpoints
+# ==========================================
+
+@app.post("/api/quizzes/generate")
+async def generate_quiz(req: QuizGenerationRequest):
+    """Generate structured AI quiz questions and initialize a state machine session."""
+    try:
+        session = await quiz_state_machine.create_session(
+            topic=req.topic,
+            difficulty=req.difficulty,
+            num_questions=req.num_questions,
+        )
+        return session
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate quiz: {str(e)}")
+
+@app.post("/api/quizzes/submit", response_model=QuizSubmissionResponse)
+async def submit_quiz(req: QuizSubmissionRequest):
+    """Submit student answers to Quiz State Machine, evaluate results, and update weak areas."""
+    try:
+        result = quiz_state_machine.evaluate_submission(
+            session_id=req.session_id,
+            user_answers=req.user_answers,
+        )
+        return QuizSubmissionResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to evaluate quiz submission: {str(e)}")
+
+# ==========================================
+# Student Analytics & Settings Endpoints
+# ==========================================
+
+@app.get("/api/analytics/profile", response_model=AnalyticsProfileResponse)
+async def get_student_profile_endpoint():
+    """Retrieve dynamic student mastery score, streak, strong, and weak area analytics."""
+    try:
+        profile_data = analytics_engine.get_full_profile()
+        return AnalyticsProfileResponse(**profile_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch student analytics: {str(e)}")
+
+@app.put("/api/settings/profile")
+async def update_profile_settings(req: UpdateProfileRequest):
+    """Update student learning settings (level, language, current subject/topic)."""
+    try:
+        updated = update_student_settings(
+            level=req.level,
+            language=req.language,
+            current_subject=req.current_subject,
+            current_topic=req.current_topic,
+        )
+        return {"status": "success", "profile": updated}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update profile settings: {str(e)}")
+

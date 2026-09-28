@@ -32,6 +32,7 @@ class QuizQuestionSchema(BaseModel):
 
 class AnalyticsProfileResponse(BaseModel):
     name: str = "B.Tech Student"
+    email: str = "student@edumate.ai"
     level: str = "Beginner"
     language: str = "English"
     currentSubject: str = "Data Structures & Algorithms"
@@ -40,6 +41,7 @@ class AnalyticsProfileResponse(BaseModel):
     weakAreas: List[str] = Field(default_factory=lambda: ["Tree Balancing", "Graph Traversals", "Recurrence Relations"])
     strongAreas: List[str] = Field(default_factory=lambda: ["Arrays & HashMaps", "Sorting Algorithms", "Stack Operations"])
     studyStreakDays: int = 5
+    subjectProgress: Optional[List[Dict[str, Any]]] = None
 
 
 class RagSearchRequest(BaseModel):
@@ -53,4 +55,39 @@ class RagSearchResponse(BaseModel):
     query: str
     total_results: int
     results: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class QuizSubmissionRequest(BaseModel):
+    session_id: str
+    user_answers: Dict[str, Any] = Field(..., description="Map of question_id to selected answer")
+
+
+class QuizSubmissionResponse(BaseModel):
+    session_id: str
+    status: str
+    score: int
+    total_questions: int
+    percentage: float
+    mistakes_count: int
+    mistaken_topics: List[str] = Field(default_factory=list)
+    results: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class StudyMaterialItem(BaseModel):
+    id: str
+    name: str
+    subject: str
+    uploadDate: str
+    size: str
+    pages: int
+    chunks: int
+    status: str
+
+
+class UpdateProfileRequest(BaseModel):
+    level: Optional[str] = None
+    language: Optional[str] = None
+    current_subject: Optional[str] = None
+    current_topic: Optional[str] = None
+
 
