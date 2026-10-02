@@ -1,4 +1,4 @@
-"""PyMuPDF (fitz) based PDF text extraction engine for EduMate RAG pipeline."""
+"""PyMuPDF based PDF text extraction engine for EduMate RAG pipeline."""
 
 import logging
 import os
@@ -6,11 +6,15 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz  # PyMuPDF — use pymupdf namespace to suppress deprecation warning
     FITZ_AVAILABLE = True
 except ImportError:
-    fitz = None
-    FITZ_AVAILABLE = False
+    try:
+        import fitz  # Fallback to legacy fitz namespace
+        FITZ_AVAILABLE = True
+    except ImportError:
+        fitz = None
+        FITZ_AVAILABLE = False
 
 from services.ai_rag.schemas.pdf_schemas import (
     PageContent,

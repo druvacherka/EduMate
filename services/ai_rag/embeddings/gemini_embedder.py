@@ -7,10 +7,10 @@ import time
 from typing import List, Optional
 
 try:
-    import google.generativeai as genai
+    from google import genai as google_genai
     GENAI_AVAILABLE = True
 except ImportError:
-    genai = None
+    google_genai = None
     GENAI_AVAILABLE = False
 
 from services.ai_rag.config import settings
@@ -37,13 +37,14 @@ class GeminiEmbedder:
     ) -> None:
         self.api_key = api_key or settings.gemini_api_key
         self.config = config or EmbeddingConfig()
+        self._client = None
 
         if GENAI_AVAILABLE and self.api_key and self.api_key != "demo_gemini_key":
             try:
-                genai.configure(api_key=self.api_key)
+                self._client = google_genai.Client(api_key=self.api_key)
                 logger.info(f"Initialized GeminiEmbedder with model '{self.config.model_name}'")
             except Exception as exc:
-                logger.warning(f"Failed to configure Google GenerativeAI API: {exc}")
+                logger.warning(f"Failed to configure Google GenAI client: {exc}")
         else:
             logger.info("Running GeminiEmbedder in offline/fallback mode")
 
@@ -59,17 +60,17 @@ class GeminiEmbedder:
         if not text or not text.strip():
             return self._generate_fallback_vector("")
 
-        if GENAI_AVAILABLE and self.api_key and self.api_key != "demo_gemini_key":
+        if GENAI_AVAILABLE and self._client is not None:
             for attempt in range(self.config.max_retries + 1):
                 try:
-                    result = genai.embed_content(
-                        model=f"models/{self.config.model_name}",
-                        content=text,
-                        task_type="retrieval_document",
+                    result = self._client.models.embed_content(
+                        model=self.config.model_name,
+                        contents=text,
                     )
-                    embedding = result.get("embedding", [])
-                    if len(embedding) == self.config.vector_dimension:
-                        return embedding
+                    if result.embeddings and result.embeddings[0].values:
+                        embedding = result.embeddings[0].values
+                        if len(embedding) == self.config.vector_dimension:
+                            return list(embedding)
                 except Exception as exc:
                     logger.warning(f"Gemini API embed attempt {attempt + 1} failed: {exc}")
                     if attempt < self.config.max_retries:
@@ -112,7 +113,7 @@ class GeminiEmbedder:
                 vec = self.embed_text(chunk.text)
                 vectors.append(vec)
                 # Check if it was generated via API or fallback
-                if self.api_key and self.api_key != "demo_gemini_key" and GENAI_AVAILABLE:
+                if self._client is not None:
                     success_count += 1
                 else:
                     fallback_count += 1

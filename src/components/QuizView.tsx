@@ -123,7 +123,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Binary Search Trees, Graph Algorithms"
+              placeholder="e.g. Real Numbers, Chemical Reactions, Light Reflection"
               style={{
                 background: 'var(--bg-tertiary)',
                 color: 'var(--text-primary)',
@@ -172,6 +172,38 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
           {isGenerating ? <Loader2 size={15} className="spin-slow" /> : <Sparkles size={15} />}
           <span>{isGenerating ? 'Generating Quiz...' : 'Generate AI Quiz'}</span>
         </button>
+      </div>
+
+      {/* Class 10 High-Yield Topic Suggestions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+          Class 10 High-Yield Topics:
+        </span>
+        {[
+          'Real Numbers & Irrationality Proofs',
+          'Chemical Reactions & Equations',
+          'Light: Reflection & Refraction',
+          'Nationalism in India',
+          'Trigonometric Identities',
+          'Life Processes: Nutrition & Respiration',
+        ].map((t, idx) => (
+          <button
+            key={idx}
+            onClick={() => setTopic(t)}
+            style={{
+              padding: '3px 10px',
+              borderRadius: 'var(--radius-full)',
+              background: topic === t ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+              border: topic === t ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+              color: topic === t ? '#38bdf8' : 'var(--text-secondary)',
+              fontSize: '0.74rem',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
       {/* Error Alert Banner */}

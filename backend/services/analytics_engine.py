@@ -57,6 +57,10 @@ class AnalyticsEngine:
                 for r in progress_rows
             ]
 
+            # Count active goals
+            cursor.execute("SELECT COUNT(*) AS cnt FROM student_goals WHERE is_active = 1;")
+            goals_cnt = cursor.fetchone()["cnt"]
+
         return {
             "name": profile.get("name", "Student"),
             "email": profile.get("email", ""),
@@ -69,6 +73,13 @@ class AnalyticsEngine:
             "weakAreas": weak_areas,
             "strongAreas": strong_areas,
             "subjectProgress": subject_progress,
+            "educationLevel": profile.get("education_level", "B.Tech / Engineering"),
+            "institution": profile.get("institution", ""),
+            "streamBranch": profile.get("stream_branch", "Computer Science & Engineering"),
+            "academicYearSemester": profile.get("academic_year_semester", "3rd Year / 5th Sem"),
+            "dailyStudyHours": profile.get("daily_study_hours", 2.0),
+            "onboardingCompleted": bool(profile.get("onboarding_completed", 1)),
+            "activeGoalsCount": goals_cnt,
         }
 
 
