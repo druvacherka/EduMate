@@ -10,6 +10,12 @@ class PageContent(BaseModel):
     page_number: int = Field(..., ge=1, description="1-indexed page number")
     text: str = Field(..., description="Extracted plain text from the page")
     has_tables: bool = Field(False, description="Whether tables were detected on this page")
+    table_snippets: List[str] = Field(
+        default_factory=list, description="Markdown formatted table snippets extracted from the page"
+    )
+    headers: List[str] = Field(
+        default_factory=list, description="Structural headings detected on this page"
+    )
     char_count: int = Field(..., ge=0, description="Character count of extracted text")
 
 
@@ -19,7 +25,7 @@ class PDFMetadata(BaseModel):
     file_name: str = Field(..., description="Original filename of the uploaded PDF")
     title: Optional[str] = Field(None, description="PDF metadata title field")
     author: Optional[str] = Field(None, description="PDF metadata author field")
-    total_pages: int = Field(..., ge=1, description="Total number of pages in the PDF")
+    total_pages: int = Field(0, ge=0, description="Total number of pages in the PDF")
     file_size_bytes: int = Field(..., ge=0, description="File size in bytes")
     creation_date: Optional[str] = Field(None, description="PDF creation date if available")
 

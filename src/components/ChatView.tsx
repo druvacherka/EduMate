@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, StudentProfile } from '../types';
+import { sendSocraticChatMessage, logVoiceSession } from '../services/api';
 import { 
   Send, 
   Mic, 
@@ -12,7 +13,10 @@ import {
   Code, 
   CheckCircle2,
   FileText,
-  Lightbulb
+  Lightbulb,
+  MessageSquare,
+  Loader2,
+  GraduationCap
 } from 'lucide-react';
 
 interface ChatViewProps {
@@ -21,56 +25,21 @@ interface ChatViewProps {
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      sender: 'tutor',
-      text: `Hello ${profile.name}! I'm EduMate, your AI Personal Tutor. We are currently focusing on **${profile.currentSubject}** (${profile.currentTopic}).\n\nHow would you like to start today? You can ask a question, request a step-by-step concept breakdown, or ask me to explain based on your uploaded notes!`,
-      timestamp: '10:00 AM',
-      level: profile.level,
-      language: profile.language,
-      quickActions: ['Explain BST Fundamentals', 'Give a real-world analogy', 'Test me with a problem']
-    },
-    {
-      id: '2',
-      sender: 'student',
-      text: 'What is a Binary Search Tree (BST) and why is the left child always smaller?',
-      timestamp: '10:01 AM'
-    },
-    {
-      id: '3',
-      sender: 'tutor',
-      text: `Great question! Let's understand **Binary Search Trees (BST)** step-by-step for the **${profile.level}** level.\n\n### 💡 Core Concept\nA Binary Search Tree is a hierarchical node structure where every node follows one strict ordering rule:\n- **Left Subtree Rule**: Every value in the left subtree is strictly **smaller** than the root value.\n- **Right Subtree Rule**: Every value in the right subtree is strictly **greater** than the root value.\n\n### 🏢 Real-World Analogy\nThink of a dictionary! If you look for words starting with **"M"**, and you open a page at **"P"**, you immediately know that "M" must be in the **left half** of the book. You can ignore the entire right half! That is why search operation takes $O(\\log N)$ time on average.`,
-      timestamp: '10:01 AM',
-      level: profile.level,
-      language: profile.language,
-      isAudio: true,
-      formula: 'T(n) = T(n/2) + O(1) \\implies O(\\log n)',
-      codeSnippet: {
-        language: 'cpp',
-        code: `struct Node {\n    int data;\n    Node* left;\n    Node* right;\n    Node(int val) : data(val), left(nullptr), right(nullptr) {}\n};`
-      },
-      documentRef: {
-        name: 'Data_Structures_Unit3_Trees.pdf',
-        page: 14,
-        snippet: 'A BST satisfies the binary-search property: let x be a node. If y is in left subtree of x, then y.key <= x.key.'
-      },
-      quickActions: ['Explain simpler', 'Show BST Insertion Example', 'Give me a practice quiz']
-    }
-  ]);
-
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const query = textToSend || inputText;
-    if (!query.trim()) return;
+    if (!query.trim() || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -81,48 +50,109 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
 
     setMessages(prev => [...prev, userMsg]);
     if (!textToSend) setInputText('');
+    setIsLoading(true);
 
-    // Simulate Socratic AI Tutor Response
-    setTimeout(() => {
-      let aiResponseText = '';
-      let codeSnippet;
-      let formula;
-
-      if (query.toLowerCase().includes('simpler') || query.toLowerCase().includes('easy')) {
-        aiResponseText = `Here is a **simpler view**:\n\nImagine a line of students arranged by height. The teacher stands in the middle. Everyone shorter goes to the left line, and everyone taller goes to the right line!\n\nIf you want to find a student, you only look at one line. That halves your work every step!`;
-      } else if (query.toLowerCase().includes('quiz') || query.toLowerCase().includes('test')) {
-        aiResponseText = `Awesome! Let's test your understanding:\n\n**Question**: If we insert values \`[50, 30, 70, 20, 40]\` into an empty BST, which node becomes the right child of 30?`;
-      } else {
-        aiResponseText = `I understand you're asking about **"${query}"**.\n\nConsidering your level (**${profile.level}**) and target language (**${profile.language}**), let's break this down:\n1. **Fundamental Rule**: We maintain sorted structure upon insertion.\n2. **Key Advantage**: Searching takes logarithmic time $O(\\log N)$.\n\nWould you like an example problem or a step-by-step code demonstration?`;
-      }
+    try {
+      const res = await sendSocraticChatMessage({
+        query,
+        level: profile.level,
+        language: profile.language,
+        conversation_history: messages.map(m => ({ sender: m.sender, text: m.text }))
+      });
 
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'tutor',
-        text: aiResponseText,
+        text: res.response,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         level: profile.level,
         language: profile.language,
         isAudio: isVoiceActive,
-        quickActions: ['Explain simpler', 'Give another example', 'Test me with a quiz']
+        quickActions: res.quick_actions || ['Explain simpler', 'Give another example', 'Test me with a quiz'],
+        citations: res.citations?.map(c => ({ document_name: c.document_name, page_number: c.page_number }))
       };
 
       setMessages(prev => [...prev, aiMsg]);
-    }, 800);
+
+      // If voice active, log session metadata
+      if (isVoiceActive) {
+        logVoiceSession({
+          language: profile.language,
+          topic: profile.currentTopic || 'Socratic Dialogue',
+          duration_seconds: 20,
+          transcript_summary: query.slice(0, 100),
+        });
+      }
+    } catch (err: any) {
+      const errorMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'tutor',
+        text: `⚠️ **Connection Error**: ${err.message || 'Unable to connect to the EduMate AI service.'}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        level: profile.level,
+        language: profile.language,
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleRecording = () => {
-    if (!isRecording) {
-      setIsRecording(true);
-      setSpeechTranscript('Listening to your speech...');
-      const speechSimulation = setTimeout(() => {
-        setSpeechTranscript('Explain BST deletion step by step');
-        setIsRecording(false);
-        handleSend('Explain BST deletion step by step');
-      }, 3000);
-    } else {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
       setIsRecording(false);
       setSpeechTranscript('');
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechTranscript('Web Speech API is not supported in this browser. Please type your query.');
+      setTimeout(() => setSpeechTranscript(''), 3000);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = profile.language === 'Telugu' ? 'te-IN' : profile.language === 'Hindi' ? 'hi-IN' : 'en-US';
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        setSpeechTranscript('Listening to your speech...');
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join('');
+        setSpeechTranscript(transcript);
+        setInputText(transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsRecording(false);
+        setSpeechTranscript(`Microphone error: ${event.error}`);
+        setTimeout(() => setSpeechTranscript(''), 3000);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        setSpeechTranscript('');
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.error('Failed to start speech recognition:', err);
+      setIsRecording(false);
+      setSpeechTranscript('Could not access microphone.');
+      setTimeout(() => setSpeechTranscript(''), 3000);
     }
   };
 
@@ -130,11 +160,37 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      height: 'calc(100vh - 70px)',
+      height: 'calc(100vh - 56px)',
       width: '100%',
       position: 'relative',
       background: 'var(--bg-primary)'
     }}>
+      {/* Scoped Pedagogical Context Banner */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '7px 20px',
+        background: 'rgba(30, 41, 59, 0.5)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+        fontSize: '0.8rem',
+        color: '#94a3b8',
+        flexWrap: 'wrap',
+        gap: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <GraduationCap size={15} color="#38bdf8" />
+          <span style={{ color: '#38bdf8', fontWeight: 600 }}>{profile.educationLevel || 'B.Tech / Engineering'}</span>
+          <span>•</span>
+          <span>{profile.currentSubject || 'General'}</span>
+          {profile.currentTopic && <span>→ <strong style={{ color: '#f8fafc' }}>{profile.currentTopic}</strong></span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span>Pedagogy: <strong style={{ color: '#10b981' }}>{profile.level}</strong></span>
+          <span>Language: <strong style={{ color: '#f59e0b' }}>{profile.language}</strong></span>
+        </div>
+      </div>
+
       {/* Message Feed */}
       <div style={{
         flex: 1,
@@ -144,7 +200,75 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
         flexDirection: 'column',
         gap: '20px'
       }}>
-        {messages.map((msg) => (
+        {messages.length === 0 ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            textAlign: 'center',
+            padding: '40px 20px',
+            color: 'var(--text-secondary)'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: 'var(--radius-xl)',
+              background: 'rgba(99, 102, 241, 0.1)',
+              border: '1px solid var(--border-color-glow)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px',
+              color: 'var(--accent-primary)'
+            }}>
+              <Sparkles size={32} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Welcome to EduMate AI Tutor ({profile.educationLevel})
+            </h3>
+            <p style={{ maxWidth: '520px', fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Ask a conceptual question, request a step-by-step NCERT breakdown, or click any topic prompt below to begin your interactive Socratic tutoring session.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: 640, justifyContent: 'center' }}>
+              {[
+                'Why is √2 an irrational number? Walk me through the contradiction proof.',
+                'Help me balance this equation: Fe + H2O → Fe3O4 + H2 step-by-step.',
+                'Explain the difference between concave and convex mirror sign conventions.',
+                'What was the Chauri Chaura incident and why did Gandhi stop Non-Cooperation?',
+                'Derive the trigonometric identity sin²θ + cos²θ = 1 using a right triangle.',
+              ].map((starter, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSend(starter)}
+                  style={{
+                    background: 'rgba(30, 41, 59, 0.7)',
+                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                    borderRadius: 20,
+                    padding: '8px 16px',
+                    color: '#e2e8f0',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#38bdf8';
+                    e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.25)';
+                    e.currentTarget.style.background = 'rgba(30, 41, 59, 0.7)';
+                  }}
+                >
+                  💡 {starter}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          messages.map((msg) => (
           <div
             key={msg.id}
             style={{
@@ -182,11 +306,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
             </div>
 
             {/* Message Card */}
-            <div className="glass-panel" style={{
-              padding: '18px 22px',
-              borderRadius: msg.sender === 'student' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+            <div style={{
+              padding: '16px 20px',
+              borderRadius: msg.sender === 'student' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
               background: msg.sender === 'student' 
-                ? 'var(--accent-gradient)' 
+                ? '#1d4ed8' 
                 : 'var(--bg-secondary)',
               color: msg.sender === 'student' ? '#ffffff' : 'var(--text-primary)',
               boxShadow: 'var(--shadow-card)',
@@ -194,7 +318,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
               lineHeight: 1.6
             }}>
               {/* Main Text Content */}
-              <div style={{ whiteSpace: 'pre-line', fontSize: '0.95rem' }}>
+              <div style={{ whiteSpace: 'pre-line', fontSize: '0.92rem' }}>
                 {msg.text}
               </div>
 
@@ -203,12 +327,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
                 <div style={{
                   margin: '12px 0',
                   padding: '10px 14px',
-                  background: 'rgba(99, 102, 241, 0.1)',
+                  background: 'rgba(37, 99, 235, 0.08)',
                   borderLeft: '3px solid var(--accent-primary)',
                   borderRadius: 'var(--radius-sm)',
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '0.9rem',
-                  color: 'var(--accent-cyan)'
+                  fontSize: '0.88rem',
+                  color: '#60a5fa'
                 }}>
                   {`$$\\mathbf{Complexity:}\\ ${msg.formula}$$`}
                 </div>
@@ -273,6 +397,66 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
                   </div>
                 </div>
               )}
+
+              {/* Verified Study Material Grounding Citations */}
+              {msg.citations && msg.citations.length > 0 && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '10px 14px',
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  fontSize: '0.8rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-emerald)', fontWeight: 600 }}>
+                    <CheckCircle2 size={15} />
+                    <span>Verified Study Material Citations ({msg.citations.length})</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                    {msg.citations.map((cit, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          borderRadius: 'var(--radius-full)',
+                          padding: '3px 10px',
+                          fontSize: '0.75rem',
+                          color: 'var(--accent-emerald)',
+                        }}
+                      >
+                        <FileText size={12} />
+                        {cit.document_name} • Page {cit.page_number}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Ungrounded Fallback Alert */}
+              {msg.text.includes("Information not found in study material") && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '8px 12px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.8rem',
+                  color: 'var(--accent-rose)',
+                }}>
+                  <HelpCircle size={16} />
+                  <span>Document Grounding Alert: Topic not found in uploaded study material.</span>
+                </div>
+              )}
             </div>
 
             {/* Socratic Quick Action Chips */}
@@ -282,15 +466,22 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
                   <button
                     key={idx}
                     onClick={() => handleSend(action)}
-                    className="btn btn-ghost"
                     style={{
-                      padding: '4px 12px',
-                      fontSize: '0.75rem',
-                      borderRadius: 'var(--radius-full)',
-                      border: '1px solid var(--border-color-glow)',
-                      background: 'rgba(99, 102, 241, 0.06)',
-                      color: 'var(--accent-primary)'
+                      padding: '5px 12px',
+                      fontSize: '0.74rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-tertiary)',
+                      color: '#60a5fa',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 500,
+                      transition: 'var(--transition-fast)'
                     }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
                   >
                     <Lightbulb size={12} />
                     <span>{action}</span>
@@ -299,7 +490,25 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
               </div>
             )}
           </div>
-        ))}
+        ))
+        )}
+        {isLoading && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-full)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            fontSize: '0.8rem',
+            color: 'var(--text-muted)',
+            alignSelf: 'flex-start'
+          }}>
+            <Loader2 size={14} className="spin-slow" color="var(--accent-primary)" />
+            <span>EduMate is formulating your Socratic response...</span>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -336,27 +545,33 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
       )}
 
       {/* Multimodal Input Toolbar */}
-      <div className="glass-panel" style={{
-        padding: '16px 24px',
+      <div style={{
+        padding: '12px 20px',
+        backgroundColor: 'var(--bg-sidebar)',
         borderTop: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
-        gap: '12px'
+        gap: '10px'
       }}>
         {/* Voice Speech Microphone Button */}
         <button
           onClick={toggleRecording}
-          className={`btn ${isRecording ? 'btn-primary pulse-active' : 'btn-secondary'}`}
           style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: 'var(--radius-full)',
+            width: '40px',
+            height: '40px',
+            borderRadius: 'var(--radius-md)',
             padding: 0,
-            background: isRecording ? 'var(--accent-rose)' : 'var(--bg-tertiary)'
+            border: isRecording ? '1px solid var(--accent-rose)' : '1px solid var(--border-color)',
+            background: isRecording ? 'rgba(244, 63, 94, 0.15)' : 'var(--bg-secondary)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'var(--transition-fast)'
           }}
           title="Speak your question using Voice STT"
         >
-          <Mic size={20} color={isRecording ? '#ffffff' : 'var(--accent-primary)'} />
+          <Mic size={18} color={isRecording ? 'var(--accent-rose)' : '#60a5fa'} />
         </button>
 
         {/* Text Input Box */}
@@ -368,30 +583,40 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
           placeholder={`Ask EduMate a question or ask to explain in ${profile.language}...`}
           style={{
             flex: 1,
-            background: 'var(--bg-tertiary)',
+            background: 'var(--bg-secondary)',
             color: 'var(--text-primary)',
             border: '1px solid var(--border-color)',
-            padding: '12px 18px',
-            borderRadius: 'var(--radius-lg)',
-            fontSize: '0.95rem',
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.88rem',
             fontFamily: 'var(--font-main)',
             outline: 'none'
           }}
+          onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-primary)'}
+          onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
         />
 
         {/* Send Button */}
         <button
           onClick={() => handleSend()}
-          className="btn btn-primary"
           style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: 'var(--radius-full)',
-            padding: 0
+            width: '40px',
+            height: '40px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            background: '#2563eb',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ffffff',
+            transition: 'var(--transition-fast)'
           }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
           title="Send Question"
         >
-          <Send size={18} color="#ffffff" />
+          <Send size={16} />
         </button>
       </div>
     </div>

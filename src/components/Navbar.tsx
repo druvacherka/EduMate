@@ -1,13 +1,14 @@
 import React from 'react';
 import { Language, LearningLevel, StudentProfile } from '../types';
-import { 
-  Globe, 
-  Sparkles, 
-  Sun, 
-  Moon, 
-  ChevronDown, 
+import {
+  Globe,
   Volume2,
-  SlidersHorizontal
+  VolumeX,
+  Flame,
+  Coins,
+  PanelLeftOpen,
+  Sparkles,
+  GraduationCap,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -17,6 +18,9 @@ interface NavbarProps {
   setTheme: (theme: 'dark' | 'light') => void;
   isVoiceActive: boolean;
   setIsVoiceActive: (active: boolean) => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  onOpenOnboarding?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -25,88 +29,117 @@ export const Navbar: React.FC<NavbarProps> = ({
   theme,
   setTheme,
   isVoiceActive,
-  setIsVoiceActive
+  setIsVoiceActive,
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+  onOpenOnboarding,
 }) => {
-  const subjects = [
-    { subject: 'Data Structures', topic: 'Binary Search Trees' },
-    { subject: 'Data Structures', topic: 'Recursion & Dynamic Programming' },
-    { subject: 'Database Management', topic: 'Normalization (1NF, 2NF, 3NF, BCNF)' },
-    { subject: 'Algorithms', topic: 'Binary Search & Sorting' },
-    { subject: 'Operating Systems', topic: 'Process Synchronization & Semaphores' },
-  ];
-
   const handleLanguageChange = (lang: Language) => {
-    setProfile(prev => ({ ...prev, language: lang }));
+    setProfile((prev) => ({ ...prev, language: lang }));
   };
 
   const handleLevelChange = (level: LearningLevel) => {
-    setProfile(prev => ({ ...prev, level: level }));
+    setProfile((prev) => ({ ...prev, level: level }));
   };
 
-  const handleSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selected = subjects[parseInt(e.target.value)];
-    if (selected) {
-      setProfile(prev => ({
-        ...prev,
-        currentSubject: selected.subject,
-        currentTopic: selected.topic
-      }));
-    }
-  };
+  const tokenPoints = Math.round(profile.masteryScore * 10);
 
   return (
-    <header className="glass-panel" style={{
-      height: '70px',
-      width: '100%',
-      padding: '0 24px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      borderBottom: '1px solid var(--border-color)',
-      zIndex: 5
-    }}>
-      {/* Active Subject & Topic Context */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
-            Active Learning Topic
+    <header
+      style={{
+        height: '56px',
+        width: '100%',
+        padding: '0 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: 'var(--bg-primary)',
+        borderBottom: '1px solid var(--border-color)',
+        zIndex: 5,
+        userSelect: 'none',
+      }}
+    >
+      {/* Left: Sidebar Toggle & Education Level Badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {isSidebarCollapsed && onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="btn btn-ghost"
+            style={{
+              padding: '6px',
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              border: 'none',
+              background: 'transparent',
+            }}
+            title="Expand sidebar"
+          >
+            <PanelLeftOpen size={18} color="#60a5fa" />
+          </button>
+        )}
+
+        {/* Education Level Pill */}
+        <div
+          onClick={onOpenOnboarding}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'rgba(56, 189, 248, 0.1)',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            borderRadius: '20px',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          title="Click to change education level or academic context"
+        >
+          <GraduationCap size={15} color="#38bdf8" />
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#38bdf8' }}>
+            {profile.educationLevel || 'B.Tech / Engineering'}
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <select
-              onChange={handleSubjectChange}
-              style={{
-                background: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-color)',
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-md)',
-                fontFamily: 'var(--font-main)',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              {subjects.map((item, idx) => (
-                <option key={idx} value={idx}>
-                  {item.subject} → {item.topic}
-                </option>
-              ))}
-            </select>
-          </div>
+          {profile.streamBranch && (
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>• {profile.streamBranch}</span>
+          )}
         </div>
+
+        {onOpenOnboarding && (
+          <button
+            onClick={onOpenOnboarding}
+            style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '16px',
+              padding: '4px 10px',
+              fontSize: '0.75rem',
+              color: '#cbd5e1',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <Sparkles size={12} color="#fbbf24" /> Customize
+          </button>
+        )}
       </div>
 
-      {/* Control Tools: Language, Level, Voice & Theme */}
+      {/* Right Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Learning Level Quick Pills */}
-        <div style={{
-          display: 'flex',
-          background: 'var(--bg-tertiary)',
-          padding: '4px',
-          borderRadius: 'var(--radius-full)',
-          border: '1px solid var(--border-color)'
-        }}>
+        {/* Level Selector Pills */}
+        <div
+          style={{
+            display: 'flex',
+            background: 'var(--bg-secondary)',
+            padding: '3px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-color)',
+          }}
+        >
           {(['Beginner', 'Intermediate', 'Advanced'] as LearningLevel[]).map((lvl) => {
             const isSelected = profile.level === lvl;
             return (
@@ -115,14 +148,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => handleLevelChange(lvl)}
                 style={{
                   border: 'none',
-                  padding: '4px 12px',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: '0.75rem',
+                  padding: '3px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.72rem',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  background: isSelected ? 'var(--accent-gradient)' : 'transparent',
-                  color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                  transition: 'var(--transition-fast)'
+                  background: isSelected ? 'var(--accent-primary)' : 'transparent',
+                  color: isSelected ? '#ffffff' : 'var(--text-muted)',
+                  transition: 'var(--transition-fast)',
                 }}
               >
                 {lvl}
@@ -131,54 +164,106 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </div>
 
-        {/* Language Selector Dropdown */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Globe size={16} color="var(--accent-cyan)" style={{ position: 'absolute', left: '10px' }} />
+        {/* Language Selector */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-md)',
+            padding: '4px 10px',
+          }}
+        >
+          <Globe size={14} color="#60a5fa" />
           <select
             value={profile.language}
             onChange={(e) => handleLanguageChange(e.target.value as Language)}
             style={{
-              background: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-color)',
-              padding: '6px 12px 6px 32px',
-              borderRadius: 'var(--radius-md)',
-              fontFamily: 'var(--font-main)',
-              fontSize: '0.85rem',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              border: 'none',
+              fontSize: '0.78rem',
               fontWeight: 500,
               outline: 'none',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              fontFamily: 'var(--font-main)',
             }}
           >
-            <option value="English">English</option>
-            <option value="Hindi">हिन्दी (Hindi)</option>
-            <option value="Telugu">తెలుగు (Telugu)</option>
+            <option value="English" style={{ background: '#111418' }}>
+              English
+            </option>
+            <option value="Hindi" style={{ background: '#111418' }}>
+              Hindi
+            </option>
+            <option value="Telugu" style={{ background: '#111418' }}>
+              Telugu
+            </option>
           </select>
         </div>
 
-        {/* Voice Speech Mode Indicator */}
+        {/* Voice Mode Toggle */}
         <button
           onClick={() => setIsVoiceActive(!isVoiceActive)}
-          className={`btn ${isVoiceActive ? 'btn-primary pulse-active' : 'btn-secondary'}`}
           style={{
-            padding: '6px 14px',
-            fontSize: '0.85rem'
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: isVoiceActive ? 'var(--accent-primary-subtle)' : 'var(--bg-secondary)',
+            border: isVoiceActive ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+            color: isVoiceActive ? '#60a5fa' : 'var(--text-muted)',
+            padding: '5px 10px',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            fontSize: '0.78rem',
+            fontWeight: 500,
           }}
           title="Toggle Spoken Tutor Voice Output"
         >
-          <Volume2 size={16} color={isVoiceActive ? '#ffffff' : 'var(--accent-primary)'} />
-          <span>{isVoiceActive ? 'Voice ON' : 'Voice Mute'}</span>
+          {isVoiceActive ? <Volume2 size={15} color="#3b82f6" /> : <VolumeX size={15} color="var(--text-muted)" />}
+          <span>{isVoiceActive ? 'Voice ON' : 'Voice Off'}</span>
         </button>
 
-        {/* Dark/Light Theme Toggle */}
-        <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="btn btn-ghost"
-          style={{ padding: '8px', borderRadius: 'var(--radius-full)' }}
-          title="Toggle Theme"
+        {/* Gold Tokens Pill */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 10px',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+          }}
+          title="Mastery Points"
         >
-          {theme === 'dark' ? <Sun size={18} color="var(--accent-amber)" /> : <Moon size={18} color="var(--accent-primary)" />}
-        </button>
+          <Coins size={15} color="#fbbf24" />
+          <span>{tokenPoints}</span>
+        </div>
+
+        {/* Fire Streak Badge */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 10px',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+          }}
+          title="Study Streak Days"
+        >
+          <Flame size={15} color="#f97316" />
+          <span>{profile.studyStreakDays}</span>
+        </div>
       </div>
     </header>
   );

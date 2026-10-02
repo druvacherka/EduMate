@@ -198,13 +198,25 @@ class QdrantVectorStore:
             if conditions:
                 query_filter = rest_models.Filter(must=conditions)
 
-            hits = self.client.search(
-                collection_name=self.config.collection_name,
-                query_vector=query.query_vector,
-                query_filter=query_filter,
-                limit=query.top_k,
-                score_threshold=query.score_threshold,
-            )
+            if hasattr(self.client, "query_points"):
+                response = self.client.query_points(
+                    collection_name=self.config.collection_name,
+                    query=query.query_vector,
+                    query_filter=query_filter,
+                    limit=query.top_k,
+                    score_threshold=query.score_threshold if query.score_threshold > 0 else None,
+                )
+                hits = response.points
+            elif hasattr(self.client, "search"):
+                hits = self.client.search(
+                    collection_name=self.config.collection_name,
+                    query_vector=query.query_vector,
+                    query_filter=query_filter,
+                    limit=query.top_k,
+                    score_threshold=query.score_threshold if query.score_threshold > 0 else None,
+                )
+            else:
+                hits = []
 
             results: List[SearchResult] = []
             for hit in hits:

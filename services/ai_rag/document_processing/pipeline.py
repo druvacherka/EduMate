@@ -13,8 +13,10 @@ from pydantic import BaseModel, Field
 
 from services.ai_rag.document_processing.pdf_parser import PDFParser, pdf_parser
 from services.ai_rag.document_processing.text_chunker import TextChunker, text_chunker
+from services.ai_rag.embeddings.gemini_embedder import GeminiEmbedder, gemini_embedder
 from services.ai_rag.schemas.chunk_schemas import ChunkedDocument
 from services.ai_rag.schemas.pdf_schemas import ParsedDocument
+from services.ai_rag.vector_store.qdrant_client import QdrantVectorStore, qdrant_store
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,9 @@ class ProcessedDocumentResult(BaseModel):
     file_path: str = Field(..., description="Path to input PDF document")
     parsed_doc: ParsedDocument = Field(..., description="Page-level parsed PDF output")
     chunked_doc: ChunkedDocument = Field(..., description="Chunked text output")
+    indexed_vectors_count: int = Field(
+        0, ge=0, description="Number of vector points upserted into Qdrant"
+    )
     processing_time_seconds: float = Field(
         ..., ge=0.0, description="Pipeline processing duration"
     )
@@ -32,20 +37,26 @@ class ProcessedDocumentResult(BaseModel):
 
 
 class DocumentProcessingPipeline:
-    """Orchestrates PDF parsing and text chunking for RAG ingestion.
+    """Orchestrates PDF parsing, text chunking, embedding, and vector indexing.
 
     Attributes:
         parser: PDFParser instance.
         chunker: TextChunker instance.
+        embedder: GeminiEmbedder instance.
+        vector_store: QdrantVectorStore instance.
     """
 
     def __init__(
         self,
         parser: Optional[PDFParser] = None,
         chunker: Optional[TextChunker] = None,
+        embedder: Optional[GeminiEmbedder] = None,
+        vector_store: Optional[QdrantVectorStore] = None,
     ) -> None:
         self.parser = parser or pdf_parser
         self.chunker = chunker or text_chunker
+        self.embedder = embedder or gemini_embedder
+        self.vector_store = vector_store or qdrant_store
 
     def process_pdf(self, file_path: str) -> ProcessedDocumentResult:
         """Process a single PDF document through parsing and chunking stages.
@@ -82,17 +93,30 @@ class DocumentProcessingPipeline:
         # Stage 2: Recursive text chunking with overlap
         chunked_doc = self.chunker.chunk_document(parsed_doc)
 
+        # Stage 3: Generate 768-dim Gemini embeddings
+        indexed_count = 0
+        if chunked_doc.chunks:
+            embedding_batch = self.embedder.embed_chunks(chunked_doc.chunks)
+            if self.vector_store and embedding_batch.vectors:
+                # Stage 4: Index vectors in Qdrant Vector Store
+                indexed_count = self.vector_store.upsert_chunks(
+                    chunks=chunked_doc.chunks,
+                    vectors=embedding_batch.vectors,
+                    document_name=chunked_doc.document_name,
+                )
+
         duration = time.perf_counter() - start_time
         logger.info(
             f"Pipeline complete for '{Path(file_path).name}': "
-            f"{parsed_doc.metadata.total_pages} pages -> {chunked_doc.total_chunks} chunks "
-            f"in {duration:.3f}s"
+            f"{parsed_doc.metadata.total_pages} pages -> {chunked_doc.total_chunks} chunks -> "
+            f"{indexed_count} indexed vectors in {duration:.3f}s"
         )
 
         return ProcessedDocumentResult(
             file_path=file_path,
             parsed_doc=parsed_doc,
             chunked_doc=chunked_doc,
+            indexed_vectors_count=indexed_count,
             processing_time_seconds=duration,
             is_success=True,
         )

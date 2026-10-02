@@ -54,6 +54,18 @@ class SearchQuery(BaseModel):
     topic_filter: Optional[str] = Field(None, description="Filter by topic metadata")
 
 
+class HybridSearchQuery(BaseModel):
+    """Parameters for hybrid dense vector + BM25 keyword search with rank fusion."""
+
+    query_text: str = Field(..., description="Raw textual search query for BM25 keyword matching")
+    query_vector: List[float] = Field(..., description="Query embedding vector for dense search")
+    top_k: int = Field(5, ge=1, le=50, description="Number of hybrid results to return")
+    dense_weight: float = Field(0.6, ge=0.0, le=1.0, description="Weight factor for dense vector similarity (0-1)")
+    score_threshold: float = Field(0.5, ge=0.0, le=1.0, description="Minimum fused similarity score threshold")
+    subject_filter: Optional[str] = Field(None, description="Filter by subject metadata")
+    topic_filter: Optional[str] = Field(None, description="Filter by topic metadata")
+
+
 class SearchResult(BaseModel):
     """Represents a matched chunk returned from similarity search."""
 
@@ -63,3 +75,12 @@ class SearchResult(BaseModel):
     page_number: int = Field(..., description="Source page number")
     text_snippet: str = Field(..., description="Chunk text snippet")
     section_title: Optional[str] = Field(None, description="Section title if present")
+
+
+class HybridSearchResult(SearchResult):
+    """Extends SearchResult with hybrid search rank and BM25 metadata."""
+
+    dense_score: float = Field(0.0, description="Dense cosine similarity score")
+    bm25_score: float = Field(0.0, description="BM25 keyword match score")
+    rrf_score: float = Field(0.0, description="Combined Reciprocal Rank Fusion score")
+
