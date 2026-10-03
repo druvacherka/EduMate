@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from services.ai_rag.llm_client import llm_client
+from ai_rag.llm_client import llm_client
 from database import (
     get_student_profile,
     create_quiz_session,
@@ -17,8 +17,8 @@ from database import (
     update_quiz_session_evaluation,
 )
 
-from services.ai_rag.prompts.adaptive_scaler import adaptive_difficulty_scaler
-from services.ai_rag.validators.json_repair import json_repair_middleware
+from ai_rag.prompts.adaptive_scaler import adaptive_difficulty_scaler
+from ai_rag.validators.json_repair import json_repair_middleware
 
 
 class QuizState(str, Enum):

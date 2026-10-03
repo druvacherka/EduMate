@@ -37,4 +37,5 @@ ENV/
 .coverage
 htmlcov/
 *.db
+temp_uploads/
 
