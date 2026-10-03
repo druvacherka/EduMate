@@ -36,19 +36,19 @@ from backend.schemas import (
 )
 
 # Import AI & RAG Engine Services
-from services.ai_rag.prompts.level_builders import prompt_factory
-from services.ai_rag.prompts.grounding_prompts import GroundedPromptBuilder
-from services.ai_rag.validators.citation_validator import CitationValidator
-from services.ai_rag.llm_client import llm_client
-from services.ai_rag.document_processing.pdf_parser import pdf_parser
-from services.ai_rag.document_processing.text_chunker import text_chunker
-from services.ai_rag.vector_store.qdrant_client import qdrant_store
-from services.ai_rag.vector_store.hybrid_search import HybridSearchEngine
-from services.ai_rag.schemas.vector_schemas import HybridSearchQuery, SearchResult, SearchQuery
-from services.ai_rag.embeddings import gemini_embedder
+from ai_rag.prompts.level_builders import prompt_factory
+from ai_rag.prompts.grounding_prompts import GroundedPromptBuilder
+from ai_rag.validators.citation_validator import CitationValidator
+from ai_rag.llm_client import llm_client
+from ai_rag.document_processing.pdf_parser import pdf_parser
+from ai_rag.document_processing.text_chunker import text_chunker
+from ai_rag.vector_store.qdrant_client import qdrant_store
+from ai_rag.vector_store.hybrid_search import HybridSearchEngine
+from ai_rag.schemas.vector_schemas import HybridSearchQuery, SearchResult, SearchQuery
+from ai_rag.embeddings import gemini_embedder
 
 # Import Backend Database & Engine Services
-from backend.database import (
+from database import (
     list_study_materials,
     insert_study_material,
     delete_study_material,
@@ -66,8 +66,8 @@ from backend.services.career_engine import career_engine
 from backend.services.context_builder import context_builder
 from backend.services.voice_engine import voice_engine
 
-from services.ai_rag.validators.language_detector import multilingual_detector
-from services.ai_rag.prompts.multilingual_prompts import multilingual_prompt_factory
+from ai_rag.validators.language_detector import multilingual_detector
+from ai_rag.prompts.multilingual_prompts import multilingual_prompt_factory
 
 hybrid_search_engine = HybridSearchEngine(vector_store=qdrant_store)
 grounded_prompt_builder = GroundedPromptBuilder()

@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.database import reset_db_to_baseline
+from database import reset_db_to_baseline
 
 client = TestClient(app)
 
