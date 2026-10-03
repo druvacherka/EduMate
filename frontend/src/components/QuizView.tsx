@@ -481,7 +481,24 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
 
             {questions.map((q, idx) => {
               const userAns = selectedAnswers[q.id];
-              const isCorrect = userAns !== undefined && (userAns === q.correctAnswer || String(userAns) === String(q.correctAnswer));
+              const resultItem = submissionResult?.results?.find(r => String(r.id) === String(q.id));
+              const isCorrect = resultItem ? resultItem.is_correct : (userAns !== undefined && String(userAns) === String(q.correctAnswer));
+              const explanationText = resultItem?.explanation || q.explanation;
+
+              const formatAnswer = (val: any, options?: string[]) => {
+                if (val === undefined || val === null || val === '') return 'No answer provided';
+                if (options && typeof val === 'number' && options[val] !== undefined) {
+                  return options[val];
+                }
+                if (options && typeof val === 'string' && /^\d+$/.test(val)) {
+                  const num = parseInt(val, 10);
+                  if (options[num] !== undefined) return options[num];
+                }
+                return String(val);
+              };
+
+              const displayedUserAns = formatAnswer(resultItem?.user_answer ?? userAns, q.options);
+              const displayedCorrectAns = formatAnswer(resultItem?.correct_answer ?? q.correctAnswer, q.options);
 
               return (
                 <div
@@ -510,9 +527,17 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
                     {q.question}
                   </h4>
 
-                  <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    <div>Your answer: <strong style={{ color: 'var(--text-primary)' }}>{q.options ? q.options[userAns] || 'None' : String(userAns)}</strong></div>
-                    <div>Correct answer: <strong style={{ color: 'var(--accent-emerald)' }}>{q.options ? q.options[q.correctAnswer] || String(q.correctAnswer) : String(q.correctAnswer)}</strong></div>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div>
+                      Your answer: <strong style={{ color: isCorrect ? 'var(--accent-emerald)' : 'var(--accent-rose)' }}>
+                        {displayedUserAns}
+                      </strong>
+                    </div>
+                    <div>
+                      Correct answer: <strong style={{ color: 'var(--accent-emerald)' }}>
+                        {displayedCorrectAns}
+                      </strong>
+                    </div>
                   </div>
 
                   {/* Step-by-Step Explanation */}
@@ -525,7 +550,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
                     color: 'var(--text-secondary)',
                     lineHeight: 1.5
                   }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>Explanation:</strong> {q.explanation}
+                    <strong style={{ color: 'var(--text-primary)' }}>Explanation:</strong> {explanationText}
                   </div>
                 </div>
               );

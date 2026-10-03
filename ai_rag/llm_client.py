@@ -100,6 +100,7 @@ class GeminiLLMClient:
         )
         if self._client is not None:
             try:
+                from ai_rag.validators.json_repair import json_repair_middleware
                 response = self._client.models.generate_content(
                     model=self.fast_model_name,
                     contents=prompt,
@@ -107,26 +108,31 @@ class GeminiLLMClient:
                         response_mime_type="application/json",
                     ),
                 )
-                return json.loads(response.text or "[]")
+                raw_text = response.text or ""
+                parsed = json_repair_middleware.repair_and_parse(raw_text)
+                if isinstance(parsed, list) and len(parsed) > 0:
+                    return parsed[:num_questions]
+                if isinstance(parsed, dict) and "questions" in parsed:
+                    return parsed["questions"][:num_questions]
             except Exception as e:
                 logger.error(f"Structured quiz generation failed: {e}")
 
-        # Fallback structured quiz JSON
-        return [
+        # Fallback structured quiz JSON calibrated to the requested number of questions
+        full_bank = [
             {
                 "id": "q1",
                 "type": "mcq",
-                "question": f"What is the primary characteristic of {topic}?",
+                "question": f"What is the foundational principle or primary characteristic of {topic}?",
                 "options": [
-                    "O(1) dynamic access",
-                    "Recursive divide and conquer approach",
-                    "Sequential traversal only",
-                    "Constant space complexity",
+                    "Sequential linear search with O(N) access",
+                    "Recursive divide-and-conquer domain reduction",
+                    "Unbounded quadratic storage allocation",
+                    "Static constant memory access with no branch points",
                 ],
                 "correctAnswer": 1,
                 "explanation": (
                     f"{topic} relies on dividing the problem domain into smaller "
-                    "sub-problems recursively to optimize step complexity."
+                    "sub-problems recursively or iteratively to optimize step complexity."
                 ),
                 "difficulty": difficulty,
                 "topic": topic,
@@ -134,17 +140,60 @@ class GeminiLLMClient:
             {
                 "id": "q2",
                 "type": "tf",
-                "question": f"{topic} guarantees logarithmic search performance in all scenarios.",
+                "question": f"In {topic}, performance remains strictly optimal even when input data is completely skewed or degenerate.",
                 "options": ["True", "False"],
-                "correctAnswer": "False",
+                "correctAnswer": 1,
                 "explanation": (
-                    "If the underlying collection or tree is unbalanced, "
-                    "performance can degrade to linear O(N)."
+                    "When input conditions are degenerate (such as an unbalanced binary tree or worst-case pivot), "
+                    "performance can degrade to linear O(N) or quadratic O(N²)."
+                ),
+                "difficulty": difficulty,
+                "topic": topic,
+            },
+            {
+                "id": "q3",
+                "type": "mcq",
+                "question": f"Which algorithmic paradigm is most commonly leveraged when optimizing operations in {topic}?",
+                "options": [
+                    "Greedy best-first local choice",
+                    "Divide and conquer with logarithmic branching",
+                    "Brute-force combinatorial enumeration",
+                    "Randomized Las Vegas selection",
+                ],
+                "correctAnswer": 1,
+                "explanation": (
+                    f"Operations in {topic} typically utilize divide-and-conquer strategies "
+                    "to halve the active search space at each iteration."
+                ),
+                "difficulty": difficulty,
+                "topic": topic,
+            },
+            {
+                "id": "q4",
+                "type": "tf",
+                "question": f"Pre-sorting or maintaining sorted invariants is essential for achieving logarithmic search efficiency in {topic}.",
+                "options": ["True", "False"],
+                "correctAnswer": 0,
+                "explanation": (
+                    "Maintaining monotonic or sorted order is the core invariant that allows discarding half the candidate elements in each step."
+                ),
+                "difficulty": difficulty,
+                "topic": topic,
+            },
+            {
+                "id": "q5",
+                "type": "short",
+                "question": f"Explain briefly why boundary conditions (e.g. low <= high vs low < high) are critical in implementations of {topic}.",
+                "correctAnswer": "Prevent off-by-one errors and infinite loop conditions when the target is at the array boundary.",
+                "rubric_keywords": ["boundary", "infinite loop", "off-by-one", "condition"],
+                "explanation": (
+                    "Careful boundary checks ensure the loop terminates correctly when the target element is absent or positioned at extreme boundaries."
                 ),
                 "difficulty": difficulty,
                 "topic": topic,
             },
         ]
+        return full_bank[:max(1, min(num_questions, len(full_bank)))]
 
     def _simulate_socratic_response(self, user_query: str) -> str:
         return (

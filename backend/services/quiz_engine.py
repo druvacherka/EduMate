@@ -140,9 +140,11 @@ class QuizStateMachine:
                 is_correct = eval_res["is_correct"]
                 explanation = f"{eval_res['feedback']} {explanation}"
             else:
-                if user_ans is not None:
-                    if str(user_ans).strip().lower() == str(correct_ans).strip().lower():
-                        is_correct = True
+                is_correct = self._check_answer_match(
+                    user_ans=user_ans,
+                    correct_ans=correct_ans,
+                    options=q.get("options"),
+                )
 
             if is_correct:
                 score += 1
@@ -183,6 +185,77 @@ class QuizStateMachine:
             "mistaken_topics": list(set(mistaken_topics)),
             "results": question_results,
         }
+
+    def _check_answer_match(
+        self,
+        user_ans: Any,
+        correct_ans: Any,
+        options: Optional[List[str]] = None,
+    ) -> bool:
+        """Robustly compare student answer against reference answer.
+
+        Handles:
+        - Exact normalized string match (ignoring whitespace and case)
+        - Boolean mappings ("true", "false", True, False, 1, 0)
+        - Index lookups (e.g. user_ans=1, options=["True", "False"], correct_ans="False")
+        - Option letter lookups ("A", "B", "C", "D")
+        - Option text equality
+        """
+        if user_ans is None or correct_ans is None:
+            return False
+
+        u_str = str(user_ans).strip().lower()
+        c_str = str(correct_ans).strip().lower()
+
+        # 1. Exact string match
+        if u_str == c_str:
+            return True
+
+        # 2. Boolean normalization
+        bool_map = {
+            "true": True,
+            "false": False,
+            "1": True,
+            "0": False,
+        }
+        if u_str in bool_map and c_str in bool_map:
+            if bool_map[u_str] == bool_map[c_str]:
+                return True
+
+        # 3. Option-based resolution for MCQs and True/False
+        if options and isinstance(options, list) and len(options) > 0:
+            opt_count = len(options)
+
+            def resolve_opt(val: Any):
+                val_str = str(val).strip()
+                # Check integer index: 0, 1, 2, ...
+                if val_str.isdigit():
+                    idx = int(val_str)
+                    if 0 <= idx < opt_count:
+                        return idx, options[idx].strip().lower()
+                # Check letter A, B, C, D
+                if len(val_str) == 1 and val_str.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                    idx = ord(val_str.upper()) - ord("A")
+                    if 0 <= idx < opt_count:
+                        return idx, options[idx].strip().lower()
+                # Check full text match against one of the options
+                for i, opt in enumerate(options):
+                    if str(opt).strip().lower() == val_str.lower():
+                        return i, str(opt).strip().lower()
+                return None, val_str.lower()
+
+            u_idx, u_opt_text = resolve_opt(user_ans)
+            c_idx, c_opt_text = resolve_opt(correct_ans)
+
+            # Matches if both resolved to the same option index
+            if u_idx is not None and c_idx is not None and u_idx == c_idx:
+                return True
+
+            # Matches if the resolved option texts match
+            if u_opt_text and c_opt_text and u_opt_text == c_opt_text:
+                return True
+
+        return False
 
     def _evaluate_adhoc_answers(self, user_answers: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback evaluation for offline/client generated questions."""
