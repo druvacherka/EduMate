@@ -8,12 +8,13 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 import uuid
 
-from backend.database import (
+from database import (
     get_student_profile,
     list_daily_tasks,
     insert_daily_task,
     toggle_daily_task,
-    get_db_connection,
+    insert_study_plan,
+    list_weak_areas,
 )
 from backend.schemas import (
     DailyDashboardResponse,
@@ -166,12 +167,9 @@ class PlannerEngine:
         total_count = len(today_tasks)
         remaining_minutes = sum(t.estimated_minutes for t in today_tasks if not t.is_completed)
 
-        # Fetch weak areas
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT topic FROM weak_areas WHERE is_mastered = 0 ORDER BY mistake_count DESC LIMIT 4;")
-            weak_rows = cursor.fetchall()
-            priority_weaks = [r["topic"] for r in weak_rows]
+        # Fetch weak areas from MongoDB
+        weak_rows = list_weak_areas(is_mastered=False, limit=4)
+        priority_weaks = [r["topic"] for r in weak_rows if r.get("topic")]
 
         rec = recommendation_engine.get_next_recommendation(student_id=student_id)
 
@@ -235,13 +233,14 @@ class PlannerEngine:
                 )
             )
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO study_plans (id, student_id, goal_id, title, target_date, total_hours_planned, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?);
-            """, (plan_id, student_id, req.goal_id, f"Adaptive Plan: {req.goal_name}", req.target_date, total_hours, today.isoformat()))
-            conn.commit()
+        insert_study_plan(
+            plan_id=plan_id,
+            goal_id=req.goal_id,
+            title=f"Adaptive Plan: {req.goal_name}",
+            target_date=req.target_date,
+            total_hours_planned=total_hours,
+            student_id=student_id,
+        )
 
         return StudyPlanSchema(
             id=plan_id,

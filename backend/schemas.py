@@ -237,7 +237,7 @@ class CurriculumHierarchyResponse(BaseModel):
 
 
 class RevisionItemSchema(BaseModel):
-    id: int
+    id: int | str
     subject: str
     topic: str
     learned_date: str
@@ -250,7 +250,7 @@ class RevisionItemSchema(BaseModel):
 
 
 class CompleteRevisionRequest(BaseModel):
-    item_id: int
+    item_id: int | str
     score: float = 100.0
 
 

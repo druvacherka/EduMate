@@ -8,7 +8,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 import uuid
 
-from backend.database import (
+from database import (
     list_student_goals,
     insert_student_goal,
     delete_student_goal,

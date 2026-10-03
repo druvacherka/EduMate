@@ -1,11 +1,17 @@
 """Student Mastery Analytics and Weak Area Engine for EduMate.
 
 Aggregates quiz performance records, identifies weak topics requiring reinforcement,
-and computes dynamic student mastery metrics.
+and computes dynamic student mastery metrics from MongoDB.
 """
 
 from typing import Any, Dict, List
-from backend.database import get_db_connection, get_student_profile
+from database import (
+    get_student_profile,
+    list_weak_areas,
+    list_strong_areas,
+    list_subject_progress,
+    list_student_goals,
+)
 
 
 class AnalyticsEngine:
@@ -17,49 +23,32 @@ class AnalyticsEngine:
         Returns:
             Dict matching AnalyticsProfileResponse schema.
         """
-        profile = get_student_profile()
+        profile = get_student_profile(1)
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
+        # Fetch active weak areas
+        weak_rows = list_weak_areas(is_mastered=False)
+        weak_areas = [r["topic"] for r in weak_rows]
 
-            # Fetch active weak areas
-            cursor.execute("""
-                SELECT topic, mistake_count FROM weak_areas
-                WHERE is_mastered = 0
-                ORDER BY mistake_count DESC;
-            """)
-            weak_rows = cursor.fetchall()
-            weak_areas = [r["topic"] for r in weak_rows]
+        # Fetch strong areas
+        strong_rows = list_strong_areas()
+        strong_areas = [r["topic"] for r in strong_rows]
 
-            # Fetch strong areas
-            cursor.execute("""
-                SELECT topic FROM strong_areas
-                ORDER BY success_count DESC;
-            """)
-            strong_rows = cursor.fetchall()
-            strong_areas = [r["topic"] for r in strong_rows]
+        # Fetch subject progress
+        progress_rows = list_subject_progress()
+        subject_progress = [
+            {
+                "name": r.get("subject_name", ""),
+                "progress": r.get("progress", 0),
+                "topicsCompleted": r.get("topics_completed", 0),
+                "totalTopics": r.get("total_topics", 10),
+                "status": r.get("status", "In Progress"),
+            }
+            for r in progress_rows
+        ]
 
-            # Fetch subject progress
-            cursor.execute("""
-                SELECT subject_name, progress, topics_completed, total_topics, status
-                FROM subject_progress
-                ORDER BY progress DESC;
-            """)
-            progress_rows = cursor.fetchall()
-            subject_progress = [
-                {
-                    "name": r["subject_name"],
-                    "progress": r["progress"],
-                    "topicsCompleted": r["topics_completed"],
-                    "totalTopics": r["total_topics"],
-                    "status": r["status"],
-                }
-                for r in progress_rows
-            ]
-
-            # Count active goals
-            cursor.execute("SELECT COUNT(*) AS cnt FROM student_goals WHERE is_active = 1;")
-            goals_cnt = cursor.fetchone()["cnt"]
+        # Count active goals
+        active_goals = [g for g in list_student_goals(1) if g.get("is_active")]
+        goals_cnt = len(active_goals)
 
         return {
             "name": profile.get("name", "Student"),
@@ -68,8 +57,8 @@ class AnalyticsEngine:
             "language": profile.get("language", "English"),
             "currentSubject": profile.get("current_subject", ""),
             "currentTopic": profile.get("current_topic", ""),
-            "masteryScore": round(profile.get("mastery_score", 0.0), 1),
-            "studyStreakDays": profile.get("study_streak_days", 0),
+            "masteryScore": round(float(profile.get("mastery_score", 0.0)), 1),
+            "studyStreakDays": int(profile.get("study_streak_days", 0)),
             "weakAreas": weak_areas,
             "strongAreas": strong_areas,
             "subjectProgress": subject_progress,
@@ -77,7 +66,7 @@ class AnalyticsEngine:
             "institution": profile.get("institution", ""),
             "streamBranch": profile.get("stream_branch", "Computer Science & Engineering"),
             "academicYearSemester": profile.get("academic_year_semester", "3rd Year / 5th Sem"),
-            "dailyStudyHours": profile.get("daily_study_hours", 2.0),
+            "dailyStudyHours": float(profile.get("daily_study_hours", 2.0)),
             "onboardingCompleted": bool(profile.get("onboarding_completed", 1)),
             "activeGoalsCount": goals_cnt,
         }

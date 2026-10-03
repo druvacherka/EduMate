@@ -1,7 +1,7 @@
 """Quiz State Machine and Automated Corrective Evaluation Engine for EduMate.
 
 Manages quiz lifecycle transitions (CREATED -> ACTIVE -> SUBMITTED -> EVALUATED),
-evaluates answers, logs student mistakes into weak areas, and updates mastery metrics.
+evaluates answers, logs student mistakes into weak areas, and updates mastery metrics via MongoDB.
 """
 
 import json
@@ -10,8 +10,12 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from services.ai_rag.llm_client import llm_client
-from backend.database import get_db_connection
-
+from database import (
+    get_student_profile,
+    create_quiz_session,
+    get_quiz_session,
+    update_quiz_session_evaluation,
+)
 
 from services.ai_rag.prompts.adaptive_scaler import adaptive_difficulty_scaler
 from services.ai_rag.validators.json_repair import json_repair_middleware
@@ -51,15 +55,13 @@ class QuizStateMachine:
         # Check student mastery to calibrate difficulty if adaptive
         calibrated_diff = difficulty
         if adaptive:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT mastery_score FROM student_profile WHERE id = 1;")
-                row = cursor.fetchone()
-                if row:
-                    calibrated_diff = adaptive_difficulty_scaler.determine_adaptive_difficulty(
-                        mastery_score=row["mastery_score"],
-                        requested_difficulty=difficulty,
-                    )
+            profile = get_student_profile(1)
+            mastery = profile.get("mastery_score")
+            if mastery is not None:
+                calibrated_diff = adaptive_difficulty_scaler.determine_adaptive_difficulty(
+                    mastery_score=float(mastery),
+                    requested_difficulty=difficulty,
+                )
 
         # Generate questions using LLM client
         questions = await llm_client.generate_structured_quiz(
@@ -68,23 +70,13 @@ class QuizStateMachine:
             difficulty=calibrated_diff,
         )
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO quiz_sessions (
-                    id, topic, difficulty, total_questions, score, percentage,
-                    status, questions_json, created_at
-                ) VALUES (?, ?, ?, ?, 0, 0.0, ?, ?, ?);
-            """, (
-                session_id,
-                topic,
-                calibrated_diff,
-                len(questions),
-                QuizState.ACTIVE.value,
-                json.dumps(questions),
-                datetime.now(timezone.utc).isoformat(),
-            ))
-            conn.commit()
+        create_quiz_session(
+            session_id=session_id,
+            topic=topic,
+            difficulty=calibrated_diff,
+            total_questions=len(questions),
+            questions=questions,
+        )
 
         return {
             "session_id": session_id,
@@ -111,109 +103,86 @@ class QuizStateMachine:
             Evaluation summary with total score, percentage, question breakdowns,
             and updated weak areas.
         """
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM quiz_sessions WHERE id = ?;", (session_id,))
-            session = cursor.fetchone()
+        session = get_quiz_session(session_id)
 
-            if not session:
-                # Fallback for ad-hoc submissions
-                return self._evaluate_adhoc_answers(user_answers)
+        if not session:
+            # Fallback for ad-hoc submissions
+            return self._evaluate_adhoc_answers(user_answers)
 
-            questions = json.loads(session["questions_json"])
-            topic = session["topic"]
+        raw_questions = session.get("questions", [])
+        if isinstance(raw_questions, str):
+            questions = json.loads(raw_questions)
+        else:
+            questions = raw_questions
 
-            # Calculate score and build detailed feedback
-            score = 0
-            question_results: List[Dict[str, Any]] = []
-            mistaken_topics: List[str] = []
+        topic = session.get("topic", "Computer Science")
 
-            for q in questions:
-                q_id = str(q.get("id"))
-                correct_ans = q.get("correctAnswer")
-                user_ans = user_answers.get(q_id)
+        # Calculate score and build detailed feedback
+        score = 0
+        question_results: List[Dict[str, Any]] = []
+        mistaken_topics: List[str] = []
 
-                # Evaluate answer based on question type
-                is_correct = False
-                explanation = q.get("explanation", "")
+        for q in questions:
+            q_id = str(q.get("id"))
+            correct_ans = q.get("correctAnswer")
+            user_ans = user_answers.get(q_id)
 
-                if q.get("type") == "short":
-                    eval_res = adaptive_difficulty_scaler.evaluate_short_answer_heuristic(
-                        student_answer=str(user_ans or ""),
-                        reference_answer=str(correct_ans or ""),
-                        rubric_keywords=q.get("rubric_keywords") or [str(correct_ans)],
-                    )
-                    is_correct = eval_res["is_correct"]
-                    explanation = f"{eval_res['feedback']} {explanation}"
-                else:
-                    if user_ans is not None:
-                        if str(user_ans).strip().lower() == str(correct_ans).strip().lower():
-                            is_correct = True
+            # Evaluate answer based on question type
+            is_correct = False
+            explanation = q.get("explanation", "")
 
-                if is_correct:
-                    score += 1
-                else:
-                    mistaken_topics.append(q.get("topic", topic))
+            if q.get("type") == "short":
+                eval_res = adaptive_difficulty_scaler.evaluate_short_answer_heuristic(
+                    student_answer=str(user_ans or ""),
+                    reference_answer=str(correct_ans or ""),
+                    rubric_keywords=q.get("rubric_keywords") or [str(correct_ans)],
+                )
+                is_correct = eval_res["is_correct"]
+                explanation = f"{eval_res['feedback']} {explanation}"
+            else:
+                if user_ans is not None:
+                    if str(user_ans).strip().lower() == str(correct_ans).strip().lower():
+                        is_correct = True
 
-                question_results.append({
-                    "id": q_id,
-                    "question": q.get("question"),
-                    "type": q.get("type"),
-                    "options": q.get("options"),
-                    "user_answer": user_ans,
-                    "correct_answer": correct_ans,
-                    "is_correct": is_correct,
-                    "explanation": explanation,
-                })
+            if is_correct:
+                score += 1
+            else:
+                mistaken_topics.append(q.get("topic", topic))
 
-            total = len(questions)
-            percentage = round((score / max(total, 1)) * 100.0, 1)
+            question_results.append({
+                "id": q_id,
+                "question": q.get("question"),
+                "type": q.get("type"),
+                "options": q.get("options"),
+                "user_answer": user_ans,
+                "correct_answer": correct_ans,
+                "is_correct": is_correct,
+                "explanation": explanation,
+            })
 
-            # Update session in DB
-            completed_at = datetime.now(timezone.utc).isoformat()
-            cursor.execute("""
-                UPDATE quiz_sessions
-                SET score = ?, percentage = ?, status = ?, user_answers_json = ?, completed_at = ?
-                WHERE id = ?;
-            """, (score, percentage, QuizState.EVALUATED.value, json.dumps(user_answers), completed_at, session_id))
+        total = len(questions)
+        percentage = round((score / max(total, 1)) * 100.0, 1)
 
-            # Update Weak Areas and Strong Areas
-            for m_topic in set(mistaken_topics):
-                cursor.execute("""
-                    INSERT INTO weak_areas (topic, subject, mistake_count, last_mistake_date)
-                    VALUES (?, 'Computer Science', 1, ?)
-                    ON CONFLICT(topic) DO UPDATE SET
-                        mistake_count = mistake_count + 1,
-                        last_mistake_date = ?;
-                """, (m_topic, completed_at, completed_at))
+        # Update session, weak areas, and dynamic student mastery in MongoDB
+        update_quiz_session_evaluation(
+            session_id=session_id,
+            score=score,
+            percentage=percentage,
+            user_answers=user_answers,
+            mistaken_topics=mistaken_topics,
+            topic=topic,
+        )
 
-            if percentage >= 70:
-                cursor.execute("""
-                    INSERT INTO strong_areas (topic, subject, success_count)
-                    VALUES (?, 'Computer Science', 1)
-                    ON CONFLICT(topic) DO UPDATE SET success_count = success_count + 1;
-                """, (topic,))
-
-            # Adjust student mastery score dynamically
-            delta = 2.5 if percentage >= 70 else -1.5
-            cursor.execute("""
-                UPDATE student_profile
-                SET mastery_score = MAX(10.0, MIN(100.0, mastery_score + ?))
-                WHERE id = 1;
-            """, (delta,))
-
-            conn.commit()
-
-            return {
-                "session_id": session_id,
-                "status": QuizState.EVALUATED.value,
-                "score": score,
-                "total_questions": total,
-                "percentage": percentage,
-                "mistakes_count": len(mistaken_topics),
-                "mistaken_topics": list(set(mistaken_topics)),
-                "results": question_results,
-            }
+        return {
+            "session_id": session_id,
+            "status": QuizState.EVALUATED.value,
+            "score": score,
+            "total_questions": total,
+            "percentage": percentage,
+            "mistakes_count": len(mistaken_topics),
+            "mistaken_topics": list(set(mistaken_topics)),
+            "results": question_results,
+        }
 
     def _evaluate_adhoc_answers(self, user_answers: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback evaluation for offline/client generated questions."""

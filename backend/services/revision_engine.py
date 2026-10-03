@@ -7,10 +7,9 @@ to reinforce retention of previously learned topics and remediated weak areas.
 from datetime import date
 from typing import Any, Dict, List, Optional
 
-from backend.database import (
+from database import (
     list_revision_items,
     record_revision_completion,
-    get_db_connection,
 )
 from backend.schemas import RevisionItemSchema, CompleteRevisionRequest
 
