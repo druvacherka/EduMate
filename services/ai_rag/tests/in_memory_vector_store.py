@@ -52,3 +52,49 @@ class InMemoryVectorStore:
                 )
         matches.sort(key=lambda result: result.score, reverse=True)
         return matches[:query.top_k]
+
+    def search_keyword_candidates(
+        self,
+        query_text: str,
+        owner_id: int,
+        top_k: int,
+        subject_filter: Optional[str] = None,
+        topic_filter: Optional[str] = None,
+    ) -> List[SearchResult]:
+        from services.ai_rag.vector_store.hybrid_search import BM25Scorer
+
+        owned_records = [
+            record
+            for record in self.records
+            if record[5] == owner_id
+            and (not subject_filter or record[3] == subject_filter)
+            and (not topic_filter or record[4] == topic_filter)
+        ]
+        documents = [
+            {"id": chunk.chunk_id, "text": chunk.text}
+            for chunk, *_ in owned_records
+        ]
+        scores = BM25Scorer().compute_scores(query_text, documents)
+        records_by_id = {
+            record[0].chunk_id: record
+            for record in owned_records
+        }
+        matching = sorted(
+            (
+                (chunk_id, score)
+                for chunk_id, score in scores.items()
+                if score > 0
+            ),
+            key=lambda item: (-item[1], item[0]),
+        )[:top_k]
+        return [
+            SearchResult(
+                chunk_id=chunk_id,
+                score=score,
+                document_name=records_by_id[chunk_id][2],
+                page_number=records_by_id[chunk_id][0].page_number,
+                text_snippet=records_by_id[chunk_id][0].text,
+                section_title=records_by_id[chunk_id][0].section_title,
+            )
+            for chunk_id, score in matching
+        ]

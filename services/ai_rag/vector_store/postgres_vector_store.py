@@ -127,6 +127,65 @@ class PostgresVectorStore:
             for row in rows
         ]
 
+    def search_keyword_candidates(
+        self,
+        query_text: str,
+        owner_id: int,
+        top_k: int,
+        subject_filter: Optional[str] = None,
+        topic_filter: Optional[str] = None,
+    ) -> List[SearchResult]:
+        """Find lexical candidates across the owner's full document collection."""
+        if not database.IS_POSTGRES or database.engine is None:
+            raise RuntimeError("RAG keyword search requires a configured PostgreSQL database.")
+        if not query_text.strip():
+            return []
+
+        conditions = [
+            "student_id = :owner_id",
+            "to_tsvector('simple', content) @@ search_terms.terms",
+        ]
+        parameters = {
+            "owner_id": owner_id,
+            "query_text": query_text,
+            "top_k": top_k,
+        }
+        if subject_filter:
+            conditions.append("subject = :subject")
+            parameters["subject"] = subject_filter
+        if topic_filter:
+            conditions.append("topic = :topic")
+            parameters["topic"] = topic_filter
+
+        statement = text(
+            f"""
+            WITH search_terms AS (
+                SELECT plainto_tsquery('simple', :query_text) AS terms
+            )
+            SELECT chunk_id, document_name, page_number, content, section_title,
+                   ts_rank_cd(to_tsvector('simple', content), search_terms.terms) AS score
+            FROM study_embeddings
+            CROSS JOIN search_terms
+            WHERE {" AND ".join(conditions)}
+            ORDER BY score DESC
+            LIMIT :top_k
+            """
+        )
+        with database.engine.connect() as connection:
+            rows = connection.execute(statement, parameters).mappings().all()
+
+        return [
+            SearchResult(
+                chunk_id=row["chunk_id"],
+                score=float(row["score"]),
+                document_name=row["document_name"],
+                page_number=row["page_number"],
+                text_snippet=row["content"],
+                section_title=row["section_title"],
+            )
+            for row in rows
+        ]
+
     def delete_document(self, document_id: str, owner_id: int) -> int:
         if not database.IS_POSTGRES or database.engine is None:
             raise RuntimeError("RAG vector storage requires a configured PostgreSQL database.")

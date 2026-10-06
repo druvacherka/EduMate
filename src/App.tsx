@@ -148,10 +148,7 @@ export function App() {
           )}
 
           {activeTab === 'curriculum' && (
-            <CurriculumView
-              onSelectTopicForChat={handleSelectTopicForChat}
-              onSelectTopicForQuiz={handleSelectTopicForQuiz}
-            />
+            <CurriculumView />
           )}
 
           {activeTab === 'tutor' && (

@@ -49,7 +49,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
     setError(null);
     try {
       const data = await generateQuizQuestions({
-        topic,
+        topic: topic.trim(),
         difficulty,
         num_questions: 3,
       });
@@ -123,7 +123,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Real Numbers, Chemical Reactions, Light Reflection"
+              placeholder="Enter a quiz topic"
               style={{
                 background: 'var(--bg-tertiary)',
                 color: 'var(--text-primary)',
@@ -172,38 +172,6 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
           {isGenerating ? <Loader2 size={15} className="spin-slow" /> : <Sparkles size={15} />}
           <span>{isGenerating ? 'Generating Quiz...' : 'Generate AI Quiz'}</span>
         </button>
-      </div>
-
-      {/* Class 10 High-Yield Topic Suggestions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-          Class 10 High-Yield Topics:
-        </span>
-        {[
-          'Real Numbers & Irrationality Proofs',
-          'Chemical Reactions & Equations',
-          'Light: Reflection & Refraction',
-          'Nationalism in India',
-          'Trigonometric Identities',
-          'Life Processes: Nutrition & Respiration',
-        ].map((t, idx) => (
-          <button
-            key={idx}
-            onClick={() => setTopic(t)}
-            style={{
-              padding: '3px 10px',
-              borderRadius: 'var(--radius-full)',
-              background: topic === t ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-              border: topic === t ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
-              color: topic === t ? '#38bdf8' : 'var(--text-secondary)',
-              fontSize: '0.74rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            {t}
-          </button>
-        ))}
       </div>
 
       {/* Error Alert Banner */}
@@ -255,7 +223,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
             No Active Quiz Session
           </h3>
           <p style={{ maxWidth: '440px', fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Enter a topic in the field above (e.g. "Binary Search Trees", "Database Normalization") and click "Generate AI Quiz" to test your knowledge with real-time evaluation.
+            Enter a topic and choose a difficulty above. Quiz questions are generated for your selection.
           </p>
         </div>
       ) : !submissionResult && currentQ ? (
@@ -480,8 +448,17 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
             </h3>
 
             {questions.map((q, idx) => {
-              const userAns = selectedAnswers[q.id];
-              const isCorrect = userAns !== undefined && (userAns === q.correctAnswer || String(userAns) === String(q.correctAnswer));
+              const evaluation = submissionResult?.results.find((result) => result.id === q.id);
+              const userAns = evaluation?.user_answer;
+              const isCorrect = evaluation?.is_correct ?? false;
+              const correctAnswer = evaluation?.correct_answer;
+              const formatAnswer = (answer: unknown) => (
+                q.options && typeof answer === 'number'
+                  ? q.options[answer] || String(answer)
+                  : answer == null
+                    ? 'No answer'
+                    : String(answer)
+              );
 
               return (
                 <div
@@ -511,8 +488,8 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
                   </h4>
 
                   <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    <div>Your answer: <strong style={{ color: 'var(--text-primary)' }}>{q.options ? q.options[userAns] || 'None' : String(userAns)}</strong></div>
-                    <div>Correct answer: <strong style={{ color: 'var(--accent-emerald)' }}>{q.options ? q.options[q.correctAnswer] || String(q.correctAnswer) : String(q.correctAnswer)}</strong></div>
+                    <div>Your answer: <strong style={{ color: 'var(--text-primary)' }}>{formatAnswer(userAns)}</strong></div>
+                    <div>Correct answer: <strong style={{ color: 'var(--accent-emerald)' }}>{formatAnswer(correctAnswer)}</strong></div>
                   </div>
 
                   {/* Step-by-Step Explanation */}
@@ -525,7 +502,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
                     color: 'var(--text-secondary)',
                     lineHeight: 1.5
                   }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>Explanation:</strong> {q.explanation}
+                    <strong style={{ color: 'var(--text-primary)' }}>Explanation:</strong> {evaluation?.explanation || q.explanation}
                   </div>
                 </div>
               );

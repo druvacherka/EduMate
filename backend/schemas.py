@@ -1,5 +1,5 @@
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Literal
+from pydantic import BaseModel, Field, field_validator
 
 class SocraticChatRequest(BaseModel):
     query: str
@@ -28,9 +28,17 @@ class SocraticChatResponse(BaseModel):
     citations: Optional[List[Dict[str, Any]]] = None
 
 class QuizGenerationRequest(BaseModel):
-    topic: str
-    num_questions: int = 3
-    difficulty: str = "Medium"
+    topic: str = Field(..., min_length=1, max_length=200)
+    num_questions: int = Field(3, ge=1, le=10)
+    difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"
+
+    @field_validator("topic")
+    @classmethod
+    def normalize_topic(cls, value: str) -> str:
+        topic = value.strip()
+        if not topic:
+            raise ValueError("Topic must not be blank.")
+        return topic
 
 class QuizQuestionSchema(BaseModel):
     id: str
@@ -218,10 +226,11 @@ class StudyPlanSchema(BaseModel):
 
 class GeneratePlanRequest(BaseModel):
     goal_id: Optional[str] = None
-    goal_name: str
+    goal_name: str = Field(..., min_length=1, max_length=200)
     target_date: Optional[str] = None
-    available_hours_per_day: float = 2.0
-    current_level: str = "Beginner"
+    available_hours_per_day: float = Field(2.0, gt=0, le=24)
+    current_level: Optional[str] = None
+    target_level: Optional[str] = None
 
 
 class CurriculumLevelSchema(BaseModel):
@@ -310,4 +319,3 @@ class OnboardingResponse(BaseModel):
     message: str
     profile: Dict[str, Any]
     active_goals: List[StudentGoalSchema]
-

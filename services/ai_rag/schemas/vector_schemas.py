@@ -23,7 +23,7 @@ class HybridSearchQuery(BaseModel):
     query_vector: List[float] = Field(..., description="Query vector for dense search")
     top_k: int = Field(5, ge=1, le=50, description="Number of hybrid results to return")
     dense_weight: float = Field(0.6, ge=0.0, le=1.0, description="Weight given to dense ranking")
-    score_threshold: float = Field(0.5, ge=0.0, le=1.0, description="Minimum fused score")
+    score_threshold: float = Field(0.3, ge=0.0, le=1.0, description="Minimum fused score")
     subject_filter: Optional[str] = Field(None, description="Filter by subject metadata")
     topic_filter: Optional[str] = Field(None, description="Filter by topic metadata")
     owner_id: Optional[int] = Field(None, description="Student profile that owns the embeddings")

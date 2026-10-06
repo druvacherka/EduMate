@@ -111,6 +111,41 @@ def test_search_filters_by_authenticated_student(monkeypatch):
     assert engine.connection.parameters["subject"] == "Math"
 
 
+def test_keyword_search_is_full_collection_and_owner_scoped(monkeypatch):
+    engine = FakeEngine(
+        FakeResult(
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "document_name": "vectors.pdf",
+                    "page_number": 1,
+                    "content": "A vector is a mathematical object.",
+                    "section_title": "Vectors",
+                    "score": 0.75,
+                }
+            ]
+        )
+    )
+    monkeypatch.setattr(database, "IS_POSTGRES", True)
+    monkeypatch.setattr(database, "engine", engine)
+
+    results = PostgresVectorStore().search_keyword_candidates(
+        query_text="mathematical vector",
+        owner_id=42,
+        top_k=50,
+        subject_filter="Math",
+    )
+
+    assert len(results) == 1
+    assert results[0].chunk_id == "chunk-1"
+    assert "plainto_tsquery('simple', :query_text)" in engine.connection.statement
+    assert "to_tsvector('simple', content) @@ search_terms.terms" in engine.connection.statement
+    assert "student_id = :owner_id" in engine.connection.statement
+    assert engine.connection.parameters["owner_id"] == 42
+    assert engine.connection.parameters["top_k"] == 50
+    assert engine.connection.parameters["subject"] == "Math"
+
+
 def test_search_rejects_missing_owner(monkeypatch):
     monkeypatch.setattr(database, "IS_POSTGRES", True)
     monkeypatch.setattr(database, "engine", FakeEngine())

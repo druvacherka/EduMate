@@ -1,4 +1,4 @@
-"""Google Gemini text-embedding-004 client and batch embedding generator."""
+"""Google Gemini retrieval embedding client and batch embedding generator."""
 
 import hashlib
 import logging
@@ -8,9 +8,11 @@ from typing import List, Optional
 
 try:
     from google import genai as google_genai
+    from google.genai import types as google_genai_types
     GENAI_AVAILABLE = True
 except ImportError:
     google_genai = None
+    google_genai_types = None
     GENAI_AVAILABLE = False
 
 from services.ai_rag.config import settings
@@ -25,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiEmbedder:
-    """Generates 768-dimensional dense vector embeddings using Gemini text-embedding-004.
+    """Generates 768-dimensional retrieval embeddings using Gemini.
 
-    Includes batch processing, exponential backoff retries, and offline fallback generator.
+    Includes separate retrieval task types and exponential backoff retries.
     """
 
     def __init__(
@@ -36,7 +38,7 @@ class GeminiEmbedder:
         config: Optional[EmbeddingConfig] = None,
     ) -> None:
         self.api_key = api_key or settings.gemini_api_key
-        self.config = config or EmbeddingConfig()
+        self.config = config or EmbeddingConfig(model_name=settings.embedding_model)
         self._client = None
 
         if GENAI_AVAILABLE and self.api_key:
@@ -48,17 +50,9 @@ class GeminiEmbedder:
         else:
             logger.info("Running GeminiEmbedder in offline/fallback mode")
 
-    def embed_text(self, text: str) -> List[float]:
-        """Generate a single 768-dimensional vector embedding for a text string.
-
-        Args:
-            text: Source text to embed.
-
-        Returns:
-            List of 768 floating point vector components.
-        """
+    def _embed_text(self, text: str, task_type: str) -> tuple[List[float], bool]:
         if not text or not text.strip():
-            return self._generate_fallback_vector("")
+            raise ValueError("Text to embed must not be empty.")
 
         if GENAI_AVAILABLE and self._client is not None:
             for attempt in range(self.config.max_retries + 1):
@@ -66,21 +60,52 @@ class GeminiEmbedder:
                     result = self._client.models.embed_content(
                         model=self.config.model_name,
                         contents=text,
+                        config=google_genai_types.EmbedContentConfig(
+                            task_type=task_type,
+                            output_dimensionality=self.config.vector_dimension,
+                        ),
                     )
                     if result.embeddings and result.embeddings[0].values:
-                        embedding = result.embeddings[0].values
-                        if len(embedding) == self.config.vector_dimension:
-                            return list(embedding)
+                        embedding = list(result.embeddings[0].values)
+                        if (
+                            len(embedding) == self.config.vector_dimension
+                            and all(math.isfinite(value) for value in embedding)
+                        ):
+                            norm = math.sqrt(sum(value * value for value in embedding))
+                            if norm > 0:
+                                return [value / norm for value in embedding], False
+                        raise ValueError(
+                            f"Gemini returned an invalid embedding for {self.config.model_name}; "
+                            f"expected {self.config.vector_dimension} finite, non-zero values."
+                        )
+                    raise RuntimeError("Gemini returned no embedding values.")
                 except Exception as exc:
                     logger.warning(f"Gemini API embed attempt {attempt + 1} failed: {exc}")
                     if attempt < self.config.max_retries:
                         time.sleep(self.config.retry_delay_seconds * (2 ** attempt))
 
-        return self._generate_fallback_vector(text)
+        if self.config.allow_fallback:
+            logger.warning("Using non-semantic fallback embedding because fallback is enabled.")
+            return self._generate_fallback_vector(text), True
+        if self._client is None:
+            raise RuntimeError(
+                "Gemini embeddings require a configured GEMINI_API_KEY; refusing to store "
+                "non-semantic fallback vectors."
+            )
+        raise RuntimeError(
+            f"Gemini embedding failed after {self.config.max_retries + 1} attempts; "
+            "refusing to store a non-semantic fallback vector."
+        )
+
+    def embed_text(self, text: str) -> List[float]:
+        """Generate a retrieval-document embedding for text."""
+        vector, _ = self._embed_text(text, "RETRIEVAL_DOCUMENT")
+        return vector
 
     def embed_query(self, text: str) -> List[float]:
-        """Generate a single 768-dimensional vector embedding for a query string."""
-        return self.embed_text(text)
+        """Generate a retrieval-query embedding for semantic search."""
+        vector, _ = self._embed_text(text, "RETRIEVAL_QUERY")
+        return vector
 
     def embed_chunks(self, chunks: List[TextChunk]) -> BatchEmbeddingResult:
         """Batch process a list of TextChunk objects into 768-dim vector embeddings.
@@ -110,13 +135,12 @@ class GeminiEmbedder:
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i : i + batch_size]
             for chunk in batch:
-                vec = self.embed_text(chunk.text)
+                vec, is_fallback = self._embed_text(chunk.text, "RETRIEVAL_DOCUMENT")
                 vectors.append(vec)
-                # Check if it was generated via API or fallback
-                if self._client is not None:
-                    success_count += 1
-                else:
+                if is_fallback:
                     fallback_count += 1
+                else:
+                    success_count += 1
 
         duration = time.perf_counter() - start_time
         logger.info(

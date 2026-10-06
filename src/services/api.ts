@@ -91,7 +91,6 @@ export interface QuizQuestionData {
   type: 'mcq' | 'tf' | 'short';
   question: string;
   options?: string[];
-  correctAnswer: any;
   explanation: string;
   difficulty: string;
   topic: string;
@@ -385,23 +384,23 @@ export async function selectStudentGoal(goalId: string): Promise<StudentGoal | n
 }
 
 export async function generateAdaptiveStudyPlan(payload: {
+  goal_id?: string;
   goal_name: string;
   target_date?: string;
-  available_hours_per_day?: number;
+  available_hours_per_day: number;
   current_level?: string;
-}): Promise<StudyPlan | null> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/planner/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    console.warn('Failed to generate adaptive plan:', err);
-    return null;
+  target_level?: string;
+}): Promise<StudyPlan> {
+  const res = await fetch(`${API_BASE_URL}/planner/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorData.detail || `Plan generation failed: ${res.statusText}`);
   }
+  return await res.json();
 }
 
 export async function fetchCurriculumLevels(): Promise<CurriculumLevel[]> {

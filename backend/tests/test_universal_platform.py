@@ -1,11 +1,7 @@
-import pytest
 from fastapi.testclient import TestClient
-from backend.main import app
-
-client = TestClient(app)
 
 
-def test_curriculum_levels():
+def test_curriculum_levels(client: TestClient):
     response = client.get("/api/curriculum/levels")
     assert response.status_code == 200
     levels = response.json()
@@ -18,7 +14,7 @@ def test_curriculum_levels():
     assert "govt_exams" in level_ids
 
 
-def test_curriculum_hierarchy():
+def test_curriculum_hierarchy(client: TestClient):
     response = client.get("/api/curriculum/hierarchy?level_id=class_10&stream=TG%20SSC%20Regular%20(All%20Subjects)")
     assert response.status_code == 200
     data = response.json()
@@ -28,7 +24,7 @@ def test_curriculum_hierarchy():
     assert any("Mathematics" in s for s in subject_names)
 
 
-def test_goals_lifecycle():
+def test_goals_lifecycle(client: TestClient):
     # 1. List goals
     res = client.get("/api/goals")
     assert res.status_code == 200
@@ -64,7 +60,7 @@ def test_goals_lifecycle():
     assert del_res.json()["status"] == "success"
 
 
-def test_daily_dashboard():
+def test_daily_dashboard(client: TestClient):
     response = client.get("/api/dashboard/daily")
     assert response.status_code == 200
     data = response.json()
@@ -83,7 +79,7 @@ def test_daily_dashboard():
     assert tog_res.json()["is_completed"] != initial_status
 
 
-def test_adaptive_planner():
+def test_adaptive_planner(client: TestClient):
     req = {
         "goal_name": "TG SSC 10/10 GPA (Board Exam 2027)",
         "target_date": "2027-03-01",
@@ -97,9 +93,23 @@ def test_adaptive_planner():
     assert "weekly_breakdown" in data
     assert len(data["weekly_breakdown"]) >= 4
     assert data["total_hours_planned"] > 0
+    assert all(item["focus_topics"][0] == "Goal fundamentals" for item in data["weekly_breakdown"])
+    assert all(item["estimated_hours"] == 15.0 for item in data["weekly_breakdown"])
 
 
-def test_recommendation_engine():
+def test_adaptive_planner_rejects_another_students_goal(client: TestClient):
+    response = client.post(
+        "/api/planner/generate",
+        json={
+            "goal_id": "goal-owned-by-another-student",
+            "goal_name": "Unowned goal",
+            "available_hours_per_day": 2,
+        },
+    )
+    assert response.status_code == 404
+
+
+def test_recommendation_engine(client: TestClient):
     res = client.get("/api/recommendations/next")
     assert res.status_code == 200
     rec = res.json()
@@ -109,7 +119,7 @@ def test_recommendation_engine():
     assert rec["estimated_minutes"] > 0
 
 
-def test_spaced_revision():
+def test_spaced_revision(client: TestClient):
     # 1. Fetch revision items
     res = client.get("/api/revision/items")
     assert res.status_code == 200
@@ -124,7 +134,7 @@ def test_spaced_revision():
     assert updated["mastery_score"] == 90.0
 
 
-def test_career_explorer():
+def test_career_explorer(client: TestClient):
     res = client.get("/api/career/paths")
     assert res.status_code == 200
     paths = res.json()
@@ -140,7 +150,7 @@ def test_career_explorer():
     assert len(detail["core_subjects"]) >= 3
 
 
-def test_voice_session():
+def test_voice_session(client: TestClient):
     voice_payload = {
         "language": "Telugu",
         "topic": "Binary Search Trees",
@@ -158,17 +168,17 @@ def test_voice_session():
     assert len(list_res.json()) >= 1
 
 
-def test_select_active_goal():
+def test_select_active_goal(client: TestClient):
     res = client.post("/api/goals/tg-goal-polycet/select")
     assert res.status_code == 200
     assert res.json()["id"] == "tg-goal-polycet"
     assert res.json()["is_active"] is True
 
     dash = client.get("/api/dashboard/daily").json()
-    assert any("POLYCET" in t["title"] for t in dash["today_tasks"])
+    assert any("POLYCET" in goal["name"] for goal in dash["active_goals"])
 
 
-def test_onboarding_flow():
+def test_onboarding_flow(client: TestClient):
     onboard_payload = {
         "name": "Arjun Sharma",
         "preferred_language": "English",
@@ -188,7 +198,7 @@ def test_onboarding_flow():
     assert len(data["active_goals"]) >= 2
 
 
-def test_onboarding_deduplication():
+def test_onboarding_deduplication(client: TestClient):
     # Calling onboarding again with identical goals should not duplicate them
     initial_goals_res = client.get("/api/goals")
     assert initial_goals_res.status_code == 200
@@ -212,4 +222,3 @@ def test_onboarding_deduplication():
     after_count = len(after_goals_res.json())
     # Count must remain the same because the goals already existed
     assert after_count == initial_count
-

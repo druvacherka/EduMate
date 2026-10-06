@@ -260,22 +260,19 @@ async def generate_socratic_chat(req: SocraticChatRequest, student_id: int = Dep
             for c in validation_res.parsed_citations
         ]
 
-        quick_actions = [
-            "Simplify explanation",
-            "Give real-world analogy",
-            "Show code example",
-            "Test my understanding",
-        ]
-
         return SocraticChatResponse(
             response=validation_res.formatted_response,
             level=req.level,
             language=effective_lang,
-            quick_actions=quick_actions,
+            quick_actions=[],
             citations=citations_dict if citations_dict else None,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate tutor response: {str(e)}")
+        logger.exception("Failed to generate Socratic tutor response for student %s", student_id)
+        raise HTTPException(
+            status_code=502,
+            detail="The AI tutor is temporarily unavailable. Check Gemini API access and try again.",
+        ) from e
 
 # ==========================================
 # Study Materials CRUD Endpoints
@@ -405,14 +402,18 @@ async def generate_quiz(req: QuizGenerationRequest, student_id: int = Depends(ge
     """Generate structured AI quiz questions and initialize a state machine session."""
     try:
         session = await quiz_state_machine.create_session(
-            topic=req.topic,
+            topic=req.topic.strip(),
             student_id=student_id,
             difficulty=req.difficulty,
             num_questions=req.num_questions,
         )
         return session
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate quiz: {str(e)}")
+        logger.exception("Failed to generate quiz for student %s", student_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Gemini could not generate a valid quiz. Please try again.",
+        ) from e
 
 @app.post("/api/quizzes/submit", response_model=QuizSubmissionResponse)
 async def submit_quiz(req: QuizSubmissionRequest, student_id: int = Depends(get_current_student_id)):
@@ -542,11 +543,19 @@ async def toggle_study_task_status(task_id: str, student_id: int = Depends(get_c
 
 @app.post("/api/planner/generate", response_model=StudyPlanSchema)
 async def generate_adaptive_study_plan(req: GeneratePlanRequest, student_id: int = Depends(get_current_student_id)):
-    """Generate dynamic multi-week adaptive roadmap based on active goal and deadline."""
+    """Generate a personalized Gemini study roadmap from the learner's inputs and progress."""
     try:
-        return planner_engine.generate_adaptive_plan(req=req, student_id=student_id)
+        return await planner_engine.generate_adaptive_plan(req=req, student_id=student_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate study plan: {str(e)}")
+        logger.exception("Failed to generate adaptive study plan for student %s", student_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Gemini could not generate an adaptive plan. Check API access and try again.",
+        ) from e
 
 
 # ==========================================

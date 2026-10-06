@@ -16,7 +16,6 @@ import {
   Lightbulb,
   MessageSquare,
   Loader2,
-  GraduationCap
 } from 'lucide-react';
 
 interface ChatViewProps {
@@ -68,7 +67,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
         level: profile.level,
         language: profile.language,
         isAudio: isVoiceActive,
-        quickActions: res.quick_actions || ['Explain simpler', 'Give another example', 'Test me with a quiz'],
+        quickActions: res.quick_actions,
         citations: res.citations?.map(c => ({ document_name: c.document_name, page_number: c.page_number }))
       };
 
@@ -78,7 +77,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
       if (isVoiceActive) {
         logVoiceSession({
           language: profile.language,
-          topic: profile.currentTopic || 'Socratic Dialogue',
+          topic: profile.currentTopic || query.slice(0, 100),
           duration_seconds: 20,
           transcript_summary: query.slice(0, 100),
         });
@@ -165,32 +164,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
       position: 'relative',
       background: 'var(--bg-primary)'
     }}>
-      {/* Scoped Pedagogical Context Banner */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '7px 20px',
-        background: 'rgba(30, 41, 59, 0.5)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-        fontSize: '0.8rem',
-        color: '#94a3b8',
-        flexWrap: 'wrap',
-        gap: 8,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <GraduationCap size={15} color="#38bdf8" />
-          <span style={{ color: '#38bdf8', fontWeight: 600 }}>{profile.educationLevel || 'Education level not set'}</span>
-          <span>•</span>
-          <span>{profile.currentSubject || 'General'}</span>
-          {profile.currentTopic && <span>→ <strong style={{ color: '#f8fafc' }}>{profile.currentTopic}</strong></span>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <span>Pedagogy: <strong style={{ color: '#10b981' }}>{profile.level}</strong></span>
-          <span>Language: <strong style={{ color: '#f59e0b' }}>{profile.language}</strong></span>
-        </div>
-      </div>
-
       {/* Message Feed */}
       <div style={{
         flex: 1,
@@ -226,46 +199,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
               <Sparkles size={32} />
             </div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              Welcome to EduMate AI Tutor ({profile.educationLevel})
+              Welcome to EduMate AI Tutor
             </h3>
             <p style={{ maxWidth: '520px', fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Ask a conceptual question, request a step-by-step NCERT breakdown, or click any topic prompt below to begin your interactive Socratic tutoring session.
+              Ask a question to begin an interactive Socratic tutoring session.
             </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: 640, justifyContent: 'center' }}>
-              {[
-                'Why is √2 an irrational number? Walk me through the contradiction proof.',
-                'Help me balance this equation: Fe + H2O → Fe3O4 + H2 step-by-step.',
-                'Explain the difference between concave and convex mirror sign conventions.',
-                'What was the Chauri Chaura incident and why did Gandhi stop Non-Cooperation?',
-                'Derive the trigonometric identity sin²θ + cos²θ = 1 using a right triangle.',
-              ].map((starter, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleSend(starter)}
-                  style={{
-                    background: 'rgba(30, 41, 59, 0.7)',
-                    border: '1px solid rgba(56, 189, 248, 0.25)',
-                    borderRadius: 20,
-                    padding: '8px 16px',
-                    color: '#e2e8f0',
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#38bdf8';
-                    e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.25)';
-                    e.currentTarget.style.background = 'rgba(30, 41, 59, 0.7)';
-                  }}
-                >
-                  💡 {starter}
-                </button>
-              ))}
-            </div>
           </div>
         ) : (
           messages.map((msg) => (
@@ -460,7 +398,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
             </div>
 
             {/* Socratic Quick Action Chips */}
-            {msg.quickActions && msg.sender === 'tutor' && (
+            {!!msg.quickActions?.length && msg.sender === 'tutor' && (
               <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                 {msg.quickActions.map((action, idx) => (
                   <button

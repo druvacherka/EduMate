@@ -12,7 +12,8 @@ from services.ai_rag.tests.in_memory_vector_store import InMemoryVectorStore
 
 
 def test_embed_text_dimensionality():
-    embedder = GeminiEmbedder()
+    embedder = GeminiEmbedder(config=EmbeddingConfig(allow_fallback=True))
+    embedder._client = None
     vec = embedder.embed_text("Data structures and algorithms in Python")
 
     assert isinstance(vec, list)
@@ -25,7 +26,10 @@ def test_embed_text_dimensionality():
 
 
 def test_embed_chunks_batch():
-    embedder = GeminiEmbedder(config=EmbeddingConfig(batch_size=2))
+    embedder = GeminiEmbedder(
+        config=EmbeddingConfig(batch_size=2, allow_fallback=True)
+    )
+    embedder._client = None
 
     chunks = [
         TextChunk(
@@ -76,7 +80,11 @@ def test_pipeline_integration():
     )
 
     vector_store = InMemoryVectorStore()
-    pipeline = DocumentProcessingPipeline(vector_store=vector_store)
+    pipeline = DocumentProcessingPipeline(
+        vector_store=vector_store,
+        embedder=GeminiEmbedder(config=EmbeddingConfig(allow_fallback=True)),
+    )
+    pipeline.embedder._client = None
 
     # Directly run chunker, embedder, and vector_store pipeline stages
     chunked = pipeline.chunker.chunk_document(mock_parsed_doc)
@@ -91,3 +99,58 @@ def test_pipeline_integration():
     assert chunked.total_chunks > 0
     assert len(embedding_result.vectors) == chunked.total_chunks
     assert upsert_count == chunked.total_chunks
+
+
+def test_gemini_embedder_uses_retrieval_task_and_configured_dimensions():
+    from types import SimpleNamespace
+
+    class FakeModels:
+        def __init__(self):
+            self.calls = []
+
+        def embed_content(self, **kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(
+                embeddings=[SimpleNamespace(values=[0.25] * 768)]
+            )
+
+    embedder = GeminiEmbedder(
+        api_key="test-key",
+        config=EmbeddingConfig(model_name="gemini-embedding-001"),
+    )
+    models = FakeModels()
+    embedder._client = SimpleNamespace(models=models)
+
+    embedder.embed_chunks(
+        [
+            TextChunk(
+                chunk_id="chunk_1",
+                text="Indexed study text.",
+                page_number=1,
+                char_count=19,
+                token_estimate=4,
+            )
+        ]
+    )
+    embedder.embed_query("Find related study text.")
+
+    document_config = models.calls[0]["config"]
+    query_config = models.calls[1]["config"]
+    assert models.calls[0]["model"] == "gemini-embedding-001"
+    assert document_config.task_type == "RETRIEVAL_DOCUMENT"
+    assert document_config.output_dimensionality == 768
+    assert query_config.task_type == "RETRIEVAL_QUERY"
+    assert query_config.output_dimensionality == 768
+    query_vector = embedder.embed_query("Find related study text.")
+    assert abs(math.sqrt(sum(value * value for value in query_vector)) - 1.0) < 1e-4
+
+
+def test_gemini_embedder_does_not_silently_use_fallback_by_default():
+    embedder = GeminiEmbedder(
+        api_key=None,
+        config=EmbeddingConfig(allow_fallback=False),
+    )
+    embedder._client = None
+
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        embedder.embed_query("Find a study note.")

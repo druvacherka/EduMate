@@ -14,7 +14,6 @@ from backend.database import get_db_connection, get_student_profile
 
 
 from services.ai_rag.prompts.adaptive_scaler import adaptive_difficulty_scaler
-from services.ai_rag.validators.json_repair import json_repair_middleware
 
 
 class QuizState(str, Enum):
@@ -34,7 +33,6 @@ class QuizStateMachine:
         student_id: int,
         difficulty: str = "Medium",
         num_questions: int = 3,
-        adaptive: bool = True,
     ) -> Dict[str, Any]:
         """Generate questions and initialize a new quiz session in CREATED state.
 
@@ -42,31 +40,17 @@ class QuizStateMachine:
             topic: Technical subject topic (e.g. 'Binary Search Trees').
             difficulty: 'Easy', 'Medium', or 'Hard'.
             num_questions: Total questions to generate.
-            adaptive: Whether to calibrate difficulty using student's historical mastery.
 
         Returns:
             Dict containing session metadata and generated questions.
         """
         session_id = f"quiz-{uuid.uuid4().hex[:8]}"
 
-        # Check student mastery to calibrate difficulty if adaptive
-        calibrated_diff = difficulty
-        if adaptive:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT mastery_score FROM student_profile WHERE id = ?;", (student_id,))
-                row = cursor.fetchone()
-                if row:
-                    calibrated_diff = adaptive_difficulty_scaler.determine_adaptive_difficulty(
-                        mastery_score=row["mastery_score"],
-                        requested_difficulty=difficulty,
-                    )
-
         # Generate questions using LLM client
         questions = await llm_client.generate_structured_quiz(
             topic=topic,
             num_questions=num_questions,
-            difficulty=calibrated_diff,
+            difficulty=difficulty,
         )
 
         with get_db_connection() as conn:
@@ -80,7 +64,7 @@ class QuizStateMachine:
                 session_id,
                 student_id,
                 topic,
-                calibrated_diff,
+                difficulty,
                 len(questions),
                 QuizState.ACTIVE.value,
                 json.dumps(questions),
@@ -91,9 +75,16 @@ class QuizStateMachine:
         return {
             "session_id": session_id,
             "topic": topic,
-            "difficulty": calibrated_diff,
+            "difficulty": difficulty,
             "status": QuizState.ACTIVE.value,
-            "questions": questions,
+            "questions": [
+                {
+                    key: value
+                    for key, value in question.items()
+                    if key not in {"correctAnswer", "correct_answer", "rubric_keywords"}
+                }
+                for question in questions
+            ],
         }
 
     def evaluate_submission(
@@ -188,7 +179,7 @@ class QuizStateMachine:
                     INSERT INTO weak_areas (student_id, topic, subject, mistake_count, last_mistake_date)
                     VALUES (?, ?, ?, 1, ?)
                     ON CONFLICT(student_id, topic) DO UPDATE SET
-                        mistake_count = mistake_count + 1,
+                        mistake_count = weak_areas.mistake_count + 1,
                         last_mistake_date = ?;
                 """, (student_id, m_topic, subject, completed_at, completed_at))
 
@@ -196,7 +187,8 @@ class QuizStateMachine:
                 cursor.execute("""
                     INSERT INTO strong_areas (student_id, topic, subject, success_count)
                     VALUES (?, ?, ?, 1)
-                    ON CONFLICT(student_id, topic) DO UPDATE SET success_count = success_count + 1;
+                    ON CONFLICT(student_id, topic) DO UPDATE SET
+                        success_count = strong_areas.success_count + 1;
                 """, (student_id, topic, subject))
 
             # Adjust student mastery score dynamically
@@ -223,22 +215,5 @@ class QuizStateMachine:
                 "mistaken_topics": list(set(mistaken_topics)),
                 "results": question_results,
             }
-
-    def _evaluate_adhoc_answers(self, user_answers: Dict[str, Any]) -> Dict[str, Any]:
-        """Fallback evaluation for offline/client generated questions."""
-        total = len(user_answers)
-        score = sum(1 for v in user_answers.values() if v in [0, 1, "True"])
-        pct = round((score / max(total, 1)) * 100.0, 1)
-        return {
-            "session_id": f"quiz-adhoc",
-            "status": QuizState.EVALUATED.value,
-            "score": score,
-            "total_questions": total,
-            "percentage": pct,
-            "mistakes_count": total - score,
-            "mistaken_topics": [],
-            "results": [],
-        }
-
 
 quiz_state_machine = QuizStateMachine()

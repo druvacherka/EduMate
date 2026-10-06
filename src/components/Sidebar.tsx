@@ -17,7 +17,6 @@ import {
   ListTodo,
   Target,
   RotateCcw,
-  BarChart3,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -58,7 +57,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const insightItems = [
-    { id: 'analytics' as ActiveTab, label: 'Mastery Analytics', icon: BarChart3 },
     { id: 'settings' as ActiveTab, label: 'Profile & Settings', icon: Settings },
   ];
 

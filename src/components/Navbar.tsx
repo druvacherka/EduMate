@@ -5,7 +5,6 @@ import {
   Volume2,
   VolumeX,
   Flame,
-  Coins,
   PanelLeftOpen,
   Sparkles,
   LogOut,
@@ -43,8 +42,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleLevelChange = (level: LearningLevel) => {
     setProfile((prev) => ({ ...prev, level: level }));
   };
-
-  const tokenPoints = Math.round(profile.masteryScore * 10);
 
   return (
     <header
@@ -204,26 +201,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           {isVoiceActive ? <Volume2 size={15} color="#3b82f6" /> : <VolumeX size={15} color="var(--text-muted)" />}
           <span>{isVoiceActive ? 'Voice ON' : 'Voice Off'}</span>
         </button>
-
-        {/* Gold Tokens Pill */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '5px 10px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-            fontSize: '0.82rem',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-          }}
-          title="Mastery Points"
-        >
-          <Coins size={15} color="#fbbf24" />
-          <span>{tokenPoints}</span>
-        </div>
 
         {onLogout && (
           <button

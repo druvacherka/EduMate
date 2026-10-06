@@ -104,3 +104,46 @@ def test_hybrid_search_end_to_end():
     results = engine.search(query)
     assert len(results) >= 1
     assert results[0].chunk_id == "chunk_a"
+
+
+def test_keyword_search_finds_candidate_outside_dense_results():
+    from services.ai_rag.schemas.chunk_schemas import TextChunk
+
+    store = InMemoryVectorStore()
+    engine = HybridSearchEngine(store)
+    chunks = [
+        TextChunk(
+            chunk_id="dense-only",
+            text="An unrelated passage about entropy.",
+            page_number=1,
+            char_count=37,
+            token_estimate=9,
+        ),
+        TextChunk(
+            chunk_id="keyword-only",
+            text="Newton's laws describe motion and classical mechanics.",
+            page_number=2,
+            char_count=54,
+            token_estimate=14,
+        ),
+    ]
+    store.upsert_chunks(
+        chunks=chunks,
+        vectors=[[1.0] * 768, [-1.0] * 768],
+        document_name="Physics.pdf",
+        owner_id=9,
+    )
+
+    results = engine.search(
+        HybridSearchQuery(
+            query_text="Newton motion mechanics",
+            query_vector=[1.0] * 768,
+            top_k=2,
+            score_threshold=0.3,
+            owner_id=9,
+        )
+    )
+
+    keyword_match = next(result for result in results if result.chunk_id == "keyword-only")
+    assert keyword_match.bm25_score > 0
+    assert keyword_match.dense_score == 0

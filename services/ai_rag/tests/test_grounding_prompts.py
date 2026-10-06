@@ -2,7 +2,6 @@
 
 import pytest
 from services.ai_rag.prompts.grounding_prompts import (
-    FALLBACK_UNGROUNDED_MESSAGE,
     GroundedPromptBuilder,
 )
 from services.ai_rag.schemas.vector_schemas import SearchResult
@@ -13,7 +12,8 @@ def test_grounded_system_prompt_builder():
     sys_prompt = builder.build_system_prompt(user_level="Beginner")
 
     assert "EduMate" in sys_prompt
-    assert "EXCLUSIVELY" in sys_prompt
+    assert "When Study Material Context is provided" in sys_prompt
+    assert "general knowledge" in sys_prompt
     assert "[Doc: <document_name>, Page <page_number>]" in sys_prompt
     assert "Target Learning Level: Beginner" in sys_prompt
 

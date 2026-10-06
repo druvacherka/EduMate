@@ -552,6 +552,10 @@ def _init_postgres_db() -> None:
             ON study_embeddings (student_id);
         """)
         cursor.execute("""
+            CREATE INDEX IF NOT EXISTS study_embeddings_content_fts_idx
+            ON study_embeddings USING gin (to_tsvector('simple', content));
+        """)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS study_materials (
                 id TEXT PRIMARY KEY,
                 student_id INTEGER NOT NULL DEFAULT 1,
