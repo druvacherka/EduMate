@@ -1,9 +1,9 @@
-"""Unit tests for Qdrant Hybrid Search & BM25 Reciprocal Rank Fusion (RRF)."""
+"""Unit tests for hybrid vector search & BM25 Reciprocal Rank Fusion (RRF)."""
 
 import pytest
 from services.ai_rag.schemas.vector_schemas import HybridSearchQuery, SearchResult
 from services.ai_rag.vector_store.hybrid_search import BM25Scorer, HybridSearchEngine
-from services.ai_rag.vector_store.qdrant_client import QdrantVectorStore
+from services.ai_rag.tests.in_memory_vector_store import InMemoryVectorStore
 
 
 def test_bm25_tokenizer_and_scoring():
@@ -21,7 +21,7 @@ def test_bm25_tokenizer_and_scoring():
 
 
 def test_reciprocal_rank_fusion():
-    store = QdrantVectorStore(location=":memory:")
+    store = InMemoryVectorStore()
     engine = HybridSearchEngine(store)
 
     dense_results = [
@@ -61,7 +61,7 @@ def test_reciprocal_rank_fusion():
 
 
 def test_hybrid_search_end_to_end():
-    store = QdrantVectorStore(location=":memory:")
+    store = InMemoryVectorStore()
     engine = HybridSearchEngine(store)
 
     from services.ai_rag.schemas.chunk_schemas import TextChunk
@@ -90,7 +90,7 @@ def test_hybrid_search_end_to_end():
         [0.9] * 768,
     ]
 
-    store.upsert_chunks(chunks=chunks, vectors=fake_vectors, document_name="Physics.pdf")
+    store.upsert_chunks(chunks=chunks, vectors=fake_vectors, document_name="Physics.pdf", owner_id=1)
 
     query = HybridSearchQuery(
         query_text="Newton mechanics motion",
@@ -98,6 +98,7 @@ def test_hybrid_search_end_to_end():
         top_k=2,
         dense_weight=0.7,
         score_threshold=0.0,
+        owner_id=1,
     )
 
     results = engine.search(query)

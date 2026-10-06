@@ -72,7 +72,7 @@ class PlannerEngine:
 
     def get_daily_dashboard(self, student_id: int = 1) -> DailyDashboardResponse:
         """Construct full daily study dashboard with greeting, tasks, and progress."""
-        profile = get_student_profile()
+        profile = get_student_profile(student_id)
         goals = goals_engine.get_goals(student_id=student_id)
         active_goals = [g for g in goals if g.is_active]
         today_tasks = self.get_or_generate_today_tasks(student_id=student_id)
@@ -95,7 +95,10 @@ class PlannerEngine:
         # Fetch weak areas
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT topic FROM weak_areas WHERE is_mastered = 0 ORDER BY mistake_count DESC LIMIT 4;")
+            cursor.execute(
+                "SELECT topic FROM weak_areas WHERE student_id = ? AND is_mastered = 0 ORDER BY mistake_count DESC LIMIT 4;",
+                (student_id,),
+            )
             weak_rows = cursor.fetchall()
             priority_weaks = [r["topic"] for r in weak_rows]
 

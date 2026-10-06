@@ -26,7 +26,7 @@ class RecommendationEngine:
         2. Spaced repetition topics currently due.
         3. Active goal milestone practice / new concept learning.
         """
-        profile = get_student_profile()
+        profile = get_student_profile(student_id)
         goals = [g for g in goals_engine.get_goals(student_id=student_id) if g.is_active]
 
         # 1. Check for prominent weak areas
@@ -34,10 +34,10 @@ class RecommendationEngine:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT topic, subject, mistake_count FROM weak_areas
-                WHERE is_mastered = 0
+                WHERE student_id = ? AND is_mastered = 0
                 ORDER BY mistake_count DESC, last_mistake_date DESC
                 LIMIT 1;
-            """)
+            """, (student_id,))
             weak_row = cursor.fetchone()
 
         if weak_row and weak_row["mistake_count"] >= 2:

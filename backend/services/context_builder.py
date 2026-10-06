@@ -20,7 +20,7 @@ class ContextBuilder:
         query_topic: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate structured context block for LLM prompt grounding."""
-        profile = get_student_profile()
+        profile = get_student_profile(student_id)
         goals = [g for g in goals_engine.get_goals(student_id=student_id) if g.is_active]
         active_goal = goals[0] if goals else None
 
@@ -30,15 +30,15 @@ class ContextBuilder:
             if query_subject:
                 cursor.execute("""
                     SELECT topic, mistake_count FROM weak_areas
-                    WHERE is_mastered = 0 AND subject LIKE ?
+                    WHERE student_id = ? AND is_mastered = 0 AND subject LIKE ?
                     ORDER BY mistake_count DESC LIMIT 2;
-                """, (f"%{query_subject}%",))
+                """, (student_id, f"%{query_subject}%"))
             else:
                 cursor.execute("""
                     SELECT topic, mistake_count FROM weak_areas
-                    WHERE is_mastered = 0
+                    WHERE student_id = ? AND is_mastered = 0
                     ORDER BY mistake_count DESC LIMIT 2;
-                """)
+                """, (student_id,))
             weak_rows = cursor.fetchall()
             weak_topics = [f"{r['topic']} ({r['mistake_count']} errors)" for r in weak_rows]
 

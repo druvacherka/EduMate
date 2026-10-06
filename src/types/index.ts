@@ -26,8 +26,8 @@ export interface ChatMessage {
   sender: 'student' | 'tutor';
   text: string;
   timestamp: string;
-  level?: LearningLevel;
-  language?: Language;
+  level?: LearningLevel | '';
+  language?: Language | '';
   quickActions?: string[];
   isAudio?: boolean;
   documentRef?: {
@@ -74,8 +74,8 @@ export interface QuizQuestion {
 export interface StudentProfile {
   name: string;
   email: string;
-  level: LearningLevel;
-  language: Language;
+  level: LearningLevel | '';
+  language: Language | '';
   currentSubject: string;
   currentTopic: string;
   masteryScore: number;
@@ -106,8 +106,8 @@ export interface StudentGoal {
   target_date?: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   available_hours_per_day: number;
-  current_level: LearningLevel;
-  target_level: LearningLevel;
+  current_level: LearningLevel | '';
+  target_level: LearningLevel | '';
   is_active: boolean;
   created_at?: string;
 }

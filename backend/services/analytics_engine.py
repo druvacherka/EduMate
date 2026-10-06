@@ -11,13 +11,13 @@ from backend.database import get_db_connection, get_student_profile
 class AnalyticsEngine:
     """Computes real-time student analytics, subject progress, and weak areas."""
 
-    def get_full_profile(self) -> Dict[str, Any]:
+    def get_full_profile(self, student_id: int) -> Dict[str, Any]:
         """Aggregate full student mastery profile including dynamic weak/strong areas.
 
         Returns:
             Dict matching AnalyticsProfileResponse schema.
         """
-        profile = get_student_profile()
+        profile = get_student_profile(student_id)
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -25,26 +25,26 @@ class AnalyticsEngine:
             # Fetch active weak areas
             cursor.execute("""
                 SELECT topic, mistake_count FROM weak_areas
-                WHERE is_mastered = 0
+                WHERE student_id = ? AND is_mastered = 0
                 ORDER BY mistake_count DESC;
-            """)
+            """, (student_id,))
             weak_rows = cursor.fetchall()
             weak_areas = [r["topic"] for r in weak_rows]
 
             # Fetch strong areas
             cursor.execute("""
-                SELECT topic FROM strong_areas
+                SELECT topic FROM strong_areas WHERE student_id = ?
                 ORDER BY success_count DESC;
-            """)
+            """, (student_id,))
             strong_rows = cursor.fetchall()
             strong_areas = [r["topic"] for r in strong_rows]
 
             # Fetch subject progress
             cursor.execute("""
                 SELECT subject_name, progress, topics_completed, total_topics, status
-                FROM subject_progress
+                FROM subject_progress WHERE student_id = ?
                 ORDER BY progress DESC;
-            """)
+            """, (student_id,))
             progress_rows = cursor.fetchall()
             subject_progress = [
                 {
@@ -58,7 +58,7 @@ class AnalyticsEngine:
             ]
 
             # Count active goals
-            cursor.execute("SELECT COUNT(*) AS cnt FROM student_goals WHERE is_active = 1;")
+            cursor.execute("SELECT COUNT(*) AS cnt FROM student_goals WHERE student_id = ? AND is_active = 1;", (student_id,))
             goals_cnt = cursor.fetchone()["cnt"]
 
         return {

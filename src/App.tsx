@@ -14,8 +14,9 @@ import { CareerExplorerView } from './components/CareerExplorerView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SettingsView } from './components/SettingsView';
 import { OnboardingModal } from './components/OnboardingModal';
+import { AuthView } from './components/AuthView';
 
-import { fetchStudentProfile } from './services/api';
+import { clearAuthToken, fetchStudentProfile, getAuthToken, validateAuthToken } from './services/api';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -23,12 +24,13 @@ export function App() {
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(Boolean(getAuthToken()));
 
   const [profile, setProfile] = useState<StudentProfile>({
-    name: 'Student',
+    name: '',
     email: '',
-    level: 'Beginner',
-    language: 'English',
+    level: '',
+    language: '',
     currentSubject: '',
     currentTopic: '',
     masteryScore: 0.0,
@@ -55,8 +57,26 @@ export function App() {
   };
 
   useEffect(() => {
-    loadProfile();
+    let mounted = true;
+    const handleUnauthorized = () => setIsAuthenticated(false);
+    window.addEventListener('edumate:unauthorized', handleUnauthorized);
+    validateAuthToken().then((valid) => {
+      if (mounted) setIsAuthenticated(valid);
+    });
+    return () => {
+      mounted = false;
+      window.removeEventListener('edumate:unauthorized', handleUnauthorized);
+    };
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) loadProfile();
+  }, [isAuthenticated]);
+
+  const handleLogout = () => {
+    clearAuthToken();
+    setIsAuthenticated(false);
+  };
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed((prev) => !prev);
@@ -89,6 +109,10 @@ export function App() {
     setActiveTab('quizzes');
   };
 
+  if (!isAuthenticated) {
+    return <AuthView onAuthenticated={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="app-container" data-theme={theme}>
       {/* Sidebar Navigation */}
@@ -112,6 +136,7 @@ export function App() {
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={toggleSidebar}
           onOpenOnboarding={() => setIsOnboardingOpen(true)}
+          onLogout={handleLogout}
         />
 
         <main style={{ flex: 1, overflowY: 'auto', position: 'relative', padding: activeTab === 'tutor' ? 0 : '24px 32px' }}>

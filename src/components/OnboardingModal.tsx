@@ -15,7 +15,7 @@ interface OnboardingModalProps {
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose, onCompleted }) => {
   const [step, setStep] = useState<number>(1);
   const [name, setName] = useState<string>('');
-  const [language, setLanguage] = useState<string>('English');
+  const [language, setLanguage] = useState<string>('');
   const [educationLevel, setEducationLevel] = useState<string>('');
 
   // Academic details
@@ -46,8 +46,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
     setSubmitting(true);
     try {
       await submitStudentOnboarding({
-        name: name.trim() || 'Student',
-        preferred_language: language,
+        name: name.trim(),
+        preferred_language: language || 'English',
         education_level: educationLevel,
         institution: institution.trim(),
         stream_branch: streamBranch,
@@ -205,6 +205,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                     outline: 'none',
                   }}
                 >
+                  <option value="" style={{ background: '#0f172a' }}>Select a language</option>
                   <option value="English" style={{ background: '#0f172a' }}>English</option>
                   <option value="Hindi" style={{ background: '#0f172a' }}>Hindi</option>
                   <option value="Telugu" style={{ background: '#0f172a' }}>Telugu</option>

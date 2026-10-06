@@ -49,7 +49,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
       goal_name: name,
       target_date: dateStr,
       available_hours_per_day: hours,
-      current_level: 'Beginner',
+      current_level: '',
     });
     setStudyPlan(plan);
     setGenerating(false);

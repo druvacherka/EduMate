@@ -31,6 +31,7 @@ class QuizStateMachine:
     async def create_session(
         self,
         topic: str,
+        student_id: int,
         difficulty: str = "Medium",
         num_questions: int = 3,
         adaptive: bool = True,
@@ -53,7 +54,7 @@ class QuizStateMachine:
         if adaptive:
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT mastery_score FROM student_profile WHERE id = 1;")
+                cursor.execute("SELECT mastery_score FROM student_profile WHERE id = ?;", (student_id,))
                 row = cursor.fetchone()
                 if row:
                     calibrated_diff = adaptive_difficulty_scaler.determine_adaptive_difficulty(
@@ -72,11 +73,12 @@ class QuizStateMachine:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO quiz_sessions (
-                    id, topic, difficulty, total_questions, score, percentage,
+                    id, student_id, topic, difficulty, total_questions, score, percentage,
                     status, questions_json, created_at
-                ) VALUES (?, ?, ?, ?, 0, 0.0, ?, ?, ?);
+                ) VALUES (?, ?, ?, ?, ?, 0, 0.0, ?, ?, ?);
             """, (
                 session_id,
+                student_id,
                 topic,
                 calibrated_diff,
                 len(questions),
@@ -98,6 +100,7 @@ class QuizStateMachine:
         self,
         session_id: str,
         user_answers: Dict[str, Any],
+        student_id: int,
     ) -> Dict[str, Any]:
         """Process student answers through the state machine and evaluate performance.
 
@@ -113,12 +116,11 @@ class QuizStateMachine:
         """
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM quiz_sessions WHERE id = ?;", (session_id,))
+            cursor.execute("SELECT * FROM quiz_sessions WHERE id = ? AND student_id = ?;", (session_id, student_id))
             session = cursor.fetchone()
 
             if not session:
-                # Fallback for ad-hoc submissions
-                return self._evaluate_adhoc_answers(user_answers)
+                raise LookupError("Quiz session was not found.")
 
             questions = json.loads(session["questions_json"])
             topic = session["topic"]
@@ -174,36 +176,40 @@ class QuizStateMachine:
             cursor.execute("""
                 UPDATE quiz_sessions
                 SET score = ?, percentage = ?, status = ?, user_answers_json = ?, completed_at = ?
-                WHERE id = ?;
-            """, (score, percentage, QuizState.EVALUATED.value, json.dumps(user_answers), completed_at, session_id))
+                WHERE id = ? AND student_id = ?;
+            """, (score, percentage, QuizState.EVALUATED.value, json.dumps(user_answers), completed_at, session_id, student_id))
 
-            profile = get_student_profile()
+            profile = get_student_profile(student_id)
             subject = profile.get("current_subject") or session["topic"]
 
             # Update Weak Areas and Strong Areas
             for m_topic in set(mistaken_topics):
                 cursor.execute("""
-                    INSERT INTO weak_areas (topic, subject, mistake_count, last_mistake_date)
-                    VALUES (?, ?, 1, ?)
-                    ON CONFLICT(topic) DO UPDATE SET
+                    INSERT INTO weak_areas (student_id, topic, subject, mistake_count, last_mistake_date)
+                    VALUES (?, ?, ?, 1, ?)
+                    ON CONFLICT(student_id, topic) DO UPDATE SET
                         mistake_count = mistake_count + 1,
                         last_mistake_date = ?;
-                """, (m_topic, subject, completed_at, completed_at))
+                """, (student_id, m_topic, subject, completed_at, completed_at))
 
             if percentage >= 70:
                 cursor.execute("""
-                    INSERT INTO strong_areas (topic, subject, success_count)
-                    VALUES (?, ?, 1)
-                    ON CONFLICT(topic) DO UPDATE SET success_count = success_count + 1;
-                """, (topic, subject))
+                    INSERT INTO strong_areas (student_id, topic, subject, success_count)
+                    VALUES (?, ?, ?, 1)
+                    ON CONFLICT(student_id, topic) DO UPDATE SET success_count = success_count + 1;
+                """, (student_id, topic, subject))
 
             # Adjust student mastery score dynamically
             delta = 2.5 if percentage >= 70 else -1.5
             cursor.execute("""
                 UPDATE student_profile
-                SET mastery_score = MAX(10.0, MIN(100.0, mastery_score + ?))
-                WHERE id = 1;
-            """, (delta,))
+                SET mastery_score = CASE
+                    WHEN mastery_score + ? < 10.0 THEN 10.0
+                    WHEN mastery_score + ? > 100.0 THEN 100.0
+                    ELSE mastery_score + ?
+                END
+                WHERE id = ?;
+            """, (delta, delta, delta, student_id))
 
             conn.commit()
 

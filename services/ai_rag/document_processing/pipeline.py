@@ -16,7 +16,7 @@ from services.ai_rag.document_processing.text_chunker import TextChunker, text_c
 from services.ai_rag.embeddings.gemini_embedder import GeminiEmbedder, gemini_embedder
 from services.ai_rag.schemas.chunk_schemas import ChunkedDocument
 from services.ai_rag.schemas.pdf_schemas import ParsedDocument
-from services.ai_rag.vector_store.qdrant_client import QdrantVectorStore, qdrant_store
+from services.ai_rag.vector_store.postgres_vector_store import PostgresVectorStore, postgres_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class ProcessedDocumentResult(BaseModel):
     parsed_doc: ParsedDocument = Field(..., description="Page-level parsed PDF output")
     chunked_doc: ChunkedDocument = Field(..., description="Chunked text output")
     indexed_vectors_count: int = Field(
-        0, ge=0, description="Number of vector points upserted into Qdrant"
+        0, ge=0, description="Number of vector embeddings stored in PostgreSQL"
     )
     processing_time_seconds: float = Field(
         ..., ge=0.0, description="Pipeline processing duration"
@@ -43,7 +43,7 @@ class DocumentProcessingPipeline:
         parser: PDFParser instance.
         chunker: TextChunker instance.
         embedder: GeminiEmbedder instance.
-        vector_store: QdrantVectorStore instance.
+        vector_store: PostgreSQL vector store instance.
     """
 
     def __init__(
@@ -51,14 +51,14 @@ class DocumentProcessingPipeline:
         parser: Optional[PDFParser] = None,
         chunker: Optional[TextChunker] = None,
         embedder: Optional[GeminiEmbedder] = None,
-        vector_store: Optional[QdrantVectorStore] = None,
+        vector_store: Optional[PostgresVectorStore] = None,
     ) -> None:
         self.parser = parser or pdf_parser
         self.chunker = chunker or text_chunker
         self.embedder = embedder or gemini_embedder
-        self.vector_store = vector_store or qdrant_store
+        self.vector_store = vector_store or postgres_vector_store
 
-    def process_pdf(self, file_path: str) -> ProcessedDocumentResult:
+    def process_pdf(self, file_path: str, owner_id: int) -> ProcessedDocumentResult:
         """Process a single PDF document through parsing and chunking stages.
 
         Args:
@@ -98,11 +98,12 @@ class DocumentProcessingPipeline:
         if chunked_doc.chunks:
             embedding_batch = self.embedder.embed_chunks(chunked_doc.chunks)
             if self.vector_store and embedding_batch.vectors:
-                # Stage 4: Index vectors in Qdrant Vector Store
+                # Stage 4: Index vectors in PostgreSQL
                 indexed_count = self.vector_store.upsert_chunks(
                     chunks=chunked_doc.chunks,
                     vectors=embedding_batch.vectors,
                     document_name=chunked_doc.document_name,
+                    owner_id=owner_id,
                 )
 
         duration = time.perf_counter() - start_time
@@ -121,7 +122,7 @@ class DocumentProcessingPipeline:
             is_success=True,
         )
 
-    def process_directory(self, dir_path: str) -> List[ProcessedDocumentResult]:
+    def process_directory(self, dir_path: str, owner_id: int) -> List[ProcessedDocumentResult]:
         """Batch process all PDF files in a specified directory.
 
         Args:
@@ -147,7 +148,7 @@ class DocumentProcessingPipeline:
         results: List[ProcessedDocumentResult] = []
 
         for pdf_file in pdf_files:
-            result = self.process_pdf(str(pdf_file))
+            result = self.process_pdf(str(pdf_file), owner_id=owner_id)
             results.append(result)
 
         successful = sum(1 for r in results if r.is_success)

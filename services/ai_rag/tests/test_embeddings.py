@@ -8,7 +8,7 @@ from services.ai_rag.embeddings.gemini_embedder import GeminiEmbedder, gemini_em
 from services.ai_rag.schemas.chunk_schemas import ChunkedDocument, TextChunk
 from services.ai_rag.schemas.embedding_schemas import BatchEmbeddingResult, EmbeddingConfig
 from services.ai_rag.schemas.pdf_schemas import PageContent, PDFMetadata, ParsedDocument
-from services.ai_rag.vector_store.qdrant_client import QdrantVectorStore
+from services.ai_rag.tests.in_memory_vector_store import InMemoryVectorStore
 
 
 def test_embed_text_dimensionality():
@@ -75,7 +75,7 @@ def test_pipeline_integration():
         is_valid=True,
     )
 
-    vector_store = QdrantVectorStore(location=":memory:")
+    vector_store = InMemoryVectorStore()
     pipeline = DocumentProcessingPipeline(vector_store=vector_store)
 
     # Directly run chunker, embedder, and vector_store pipeline stages
@@ -85,13 +85,9 @@ def test_pipeline_integration():
         chunks=chunked.chunks,
         vectors=embedding_result.vectors,
         document_name=chunked.document_name,
+        owner_id=1,
     )
-
-    from services.ai_rag.vector_store.qdrant_client import QDRANT_AVAILABLE
 
     assert chunked.total_chunks > 0
     assert len(embedding_result.vectors) == chunked.total_chunks
-    if QDRANT_AVAILABLE:
-        assert upsert_count == chunked.total_chunks
-    else:
-        assert upsert_count == 0
+    assert upsert_count == chunked.total_chunks

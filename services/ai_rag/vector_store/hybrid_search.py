@@ -1,14 +1,12 @@
-"""Hybrid Search engine combining Qdrant Dense Vector search with BM25 Keyword scoring.
+"""Hybrid search combining PostgreSQL dense-vector search with BM25 keyword scoring.
 
 Uses Reciprocal Rank Fusion (RRF) to merge dense vector similarity results and keyword matching scores.
 """
 
 import math
 import re
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from services.ai_rag.schemas.vector_schemas import HybridSearchQuery, HybridSearchResult, SearchResult
-from services.ai_rag.vector_store.qdrant_client import QdrantVectorStore
-
 
 class BM25Scorer:
     """Lightweight in-memory BM25 tokenizer and ranker for text chunks."""
@@ -69,9 +67,9 @@ class BM25Scorer:
 
 
 class HybridSearchEngine:
-    """Orchestrates hybrid dense + BM25 search over Qdrant vector store."""
+    """Orchestrates hybrid dense + BM25 search over the configured vector store."""
 
-    def __init__(self, vector_store: QdrantVectorStore, rrf_k: int = 60) -> None:
+    def __init__(self, vector_store: Any, rrf_k: int = 60) -> None:
         self.vector_store = vector_store
         self.rrf_k = rrf_k
         self.bm25_scorer = BM25Scorer()
@@ -89,7 +87,7 @@ class HybridSearchEngine:
         RRF_score = dense_weight * (1 / (rrf_k + dense_rank)) + (1 - dense_weight) * (1 / (rrf_k + bm25_rank))
 
         Args:
-            dense_results: List of SearchResult from Qdrant vector search.
+            dense_results: List of SearchResult from the configured vector store.
             bm25_scores: Dict mapping chunk_id to BM25 score.
             dense_weight: Weight given to dense vector ranking (0.0 to 1.0).
             top_k: Max results to return.
@@ -161,7 +159,7 @@ class HybridSearchEngine:
         Returns:
             List of HybridSearchResult items.
         """
-        # 1. Fetch dense candidates from Qdrant
+        # 1. Fetch dense candidates from the configured vector store
         from services.ai_rag.schemas.vector_schemas import SearchQuery
 
         dense_query = SearchQuery(
@@ -170,6 +168,7 @@ class HybridSearchEngine:
             score_threshold=0.0,
             subject_filter=query.subject_filter,
             topic_filter=query.topic_filter,
+            owner_id=query.owner_id,
         )
         dense_results = self.vector_store.search_similar(dense_query)
 

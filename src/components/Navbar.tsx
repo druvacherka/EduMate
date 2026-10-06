@@ -8,6 +8,7 @@ import {
   Coins,
   PanelLeftOpen,
   Sparkles,
+  LogOut,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -20,6 +21,7 @@ interface NavbarProps {
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   onOpenOnboarding?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +34,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isSidebarCollapsed = false,
   onToggleSidebar,
   onOpenOnboarding,
+  onLogout,
 }) => {
   const handleLanguageChange = (lang: Language) => {
     setProfile((prev) => ({ ...prev, language: lang }));
@@ -165,6 +168,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               fontFamily: 'var(--font-main)',
             }}
           >
+            <option value="" style={{ background: '#111418' }}>
+              Select language
+            </option>
             <option value="English" style={{ background: '#111418' }}>
               English
             </option>
@@ -218,6 +224,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Coins size={15} color="#fbbf24" />
           <span>{tokenPoints}</span>
         </div>
+
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Sign out"
+            aria-label="Sign out"
+            style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-secondary)', padding: 6, cursor: 'pointer' }}
+          >
+            <LogOut size={16} />
+          </button>
+        )}
 
         {/* Fire Streak Badge */}
         <div

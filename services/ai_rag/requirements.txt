@@ -6,8 +6,7 @@ pydantic>=2.7.0,<3.0.0
 # PDF Processing & Parsing
 PyMuPDF>=1.24.0,<2.0.0
 
-# Vector Database Client
-qdrant-client>=1.9.0,<2.0.0
+# Vector storage is provided by PostgreSQL with the pgvector extension.
 
 # Google Gemini LLM & Embeddings SDK (new unified SDK)
 google-genai>=2.0.0

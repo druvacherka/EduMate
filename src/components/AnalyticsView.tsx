@@ -64,7 +64,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
-            {getGreeting()}, {profile.name || 'Student'} 👋
+            {getGreeting()}, {profile.name || 'Learner'} 👋
           </h1>
           {isLoading && <Loader2 size={18} className="spin-slow" color="#3b82f6" />}
         </div>
