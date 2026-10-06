@@ -106,7 +106,7 @@ class GoalsEngine:
         goals = self.get_goals(student_id=student_id)
         active_goals = [g for g in goals if g.is_active]
         if not active_goals:
-            return 2.0
+            return 0.0
         return sum(g.available_hours_per_day for g in active_goals)
 
 

@@ -25,30 +25,22 @@ export function App() {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
 
   const [profile, setProfile] = useState<StudentProfile>({
-    name: 'Druva',
-    email: 'druva@edumate.ai',
+    name: 'Student',
+    email: '',
     level: 'Beginner',
     language: 'English',
-    currentSubject: 'Mathematics',
-    currentTopic: 'Real Numbers: Logarithms & Euclid Division Lemma',
-    masteryScore: 72.0,
-    weakAreas: [
-      'Logarithms: Laws & Change of Base (Ex 1.5)',
-      'Lens Maker Formula Numerical & Sign Conventions',
-      'Quantum Numbers (n, l, m, s) & Electronic Configuration',
-    ],
-    strongAreas: [
-      'Sets: Venn Diagrams & Set Difference (A-B)',
-      'Nutrition: Human Digestive System & Enzymes',
-      'Telangana Movement: State Formation June 2, 2014',
-    ],
-    studyStreakDays: 3,
-    educationLevel: 'Telangana State Board SSC (Class 10)',
-    institution: 'Telangana State Model School',
-    streamBranch: 'TG SSC (English & Telugu Medium)',
-    academicYearSemester: 'Class 10th SSC (2026-2027)',
-    dailyStudyHours: 3.0,
-    onboardingCompleted: true,
+    currentSubject: '',
+    currentTopic: '',
+    masteryScore: 0.0,
+    weakAreas: [],
+    strongAreas: [],
+    studyStreakDays: 0,
+    educationLevel: '',
+    institution: '',
+    streamBranch: '',
+    academicYearSemester: '',
+    dailyStudyHours: 0,
+    onboardingCompleted: false,
   });
 
   const loadProfile = () => {

@@ -251,7 +251,7 @@ async def get_study_materials():
 @app.post("/api/materials/upload")
 async def upload_study_material(
     file: UploadFile = File(...),
-    subject: str = Form("Computer Science"),
+    subject: str = Form("General"),
 ):
     """Upload PDF, extract content, chunk text, embed vectors, index in Qdrant, and save to DB."""
     if not file.filename.endswith(".pdf"):
@@ -476,7 +476,7 @@ async def get_all_education_levels():
 
 
 @app.get("/api/curriculum/hierarchy", response_model=CurriculumHierarchyResponse)
-async def get_curriculum_hierarchy(level_id: str = "class_10", stream: str = "TG SSC Regular (All Subjects)"):
+async def get_curriculum_hierarchy(level_id: str = "btech", stream: str = "Computer Science & Engineering"):
     """Retrieve subject -> chapter -> topic hierarchy for given level and stream."""
     try:
         subjects = curriculum_engine.get_subjects_hierarchy(level_id=level_id, stream=stream)

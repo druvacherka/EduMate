@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from services.ai_rag.llm_client import llm_client
-from backend.database import get_db_connection
+from backend.database import get_db_connection, get_student_profile
 
 
 from services.ai_rag.prompts.adaptive_scaler import adaptive_difficulty_scaler
@@ -177,22 +177,25 @@ class QuizStateMachine:
                 WHERE id = ?;
             """, (score, percentage, QuizState.EVALUATED.value, json.dumps(user_answers), completed_at, session_id))
 
+            profile = get_student_profile()
+            subject = profile.get("current_subject") or session["topic"]
+
             # Update Weak Areas and Strong Areas
             for m_topic in set(mistaken_topics):
                 cursor.execute("""
                     INSERT INTO weak_areas (topic, subject, mistake_count, last_mistake_date)
-                    VALUES (?, 'Computer Science', 1, ?)
+                    VALUES (?, ?, 1, ?)
                     ON CONFLICT(topic) DO UPDATE SET
                         mistake_count = mistake_count + 1,
                         last_mistake_date = ?;
-                """, (m_topic, completed_at, completed_at))
+                """, (m_topic, subject, completed_at, completed_at))
 
             if percentage >= 70:
                 cursor.execute("""
                     INSERT INTO strong_areas (topic, subject, success_count)
-                    VALUES (?, 'Computer Science', 1)
+                    VALUES (?, ?, 1)
                     ON CONFLICT(topic) DO UPDATE SET success_count = success_count + 1;
-                """, (topic,))
+                """, (topic, subject))
 
             # Adjust student mastery score dynamically
             delta = 2.5 if percentage >= 70 else -1.5

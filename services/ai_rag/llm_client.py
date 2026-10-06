@@ -23,7 +23,7 @@ class GeminiLLMClient:
         self.fast_model_name = settings.fast_model
         self._client: Optional[genai.Client] = None
 
-        if self.api_key and self.api_key != "demo_gemini_key":
+        if self.api_key:
             try:
                 self._client = genai.Client(api_key=self.api_key)
                 logger.info("Google Gemini SDK (google.genai) successfully configured with API Key.")

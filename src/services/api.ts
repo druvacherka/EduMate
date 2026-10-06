@@ -112,7 +112,7 @@ export async function fetchStudyMaterials(): Promise<StudyDocument[]> {
 
 export async function uploadStudyDocument(
   file: File,
-  subject: string = 'Computer Science',
+  subject: string = 'General',
   educationLevel: string = 'All',
   curriculum: string = 'General'
 ) {
@@ -200,9 +200,10 @@ export async function fetchStudentProfile(): Promise<StudentProfile & { subjectP
       weakAreas: [],
       strongAreas: [],
       subjectProgress: [],
-      educationLevel: 'B.Tech / Engineering',
-      streamBranch: 'Computer Science',
-      dailyStudyHours: 2.0,
+      educationLevel: '',
+      streamBranch: '',
+      dailyStudyHours: 0,
+      onboardingCompleted: false,
     };
   }
 }

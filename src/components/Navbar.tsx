@@ -8,7 +8,6 @@ import {
   Coins,
   PanelLeftOpen,
   Sparkles,
-  GraduationCap,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -59,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         userSelect: 'none',
       }}
     >
-      {/* Left: Sidebar Toggle & Education Level Badge */}
+      {/* Left: Sidebar Toggle & Academic Context Action */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {isSidebarCollapsed && onToggleSidebar && (
           <button
@@ -81,31 +80,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <PanelLeftOpen size={18} color="#60a5fa" />
           </button>
         )}
-
-        {/* Education Level Pill */}
-        <div
-          onClick={onOpenOnboarding}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(56, 189, 248, 0.1)',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
-            borderRadius: '20px',
-            padding: '4px 12px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          title="Click to change education level or academic context"
-        >
-          <GraduationCap size={15} color="#38bdf8" />
-          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#38bdf8' }}>
-            {profile.educationLevel || 'B.Tech / Engineering'}
-          </span>
-          {profile.streamBranch && (
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>• {profile.streamBranch}</span>
-          )}
-        </div>
 
         {onOpenOnboarding && (
           <button

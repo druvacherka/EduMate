@@ -180,7 +180,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <GraduationCap size={15} color="#38bdf8" />
-          <span style={{ color: '#38bdf8', fontWeight: 600 }}>{profile.educationLevel || 'B.Tech / Engineering'}</span>
+          <span style={{ color: '#38bdf8', fontWeight: 600 }}>{profile.educationLevel || 'Education level not set'}</span>
           <span>•</span>
           <span>{profile.currentSubject || 'General'}</span>
           {profile.currentTopic && <span>→ <strong style={{ color: '#f8fafc' }}>{profile.currentTopic}</strong></span>}

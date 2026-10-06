@@ -39,7 +39,7 @@ class GeminiEmbedder:
         self.config = config or EmbeddingConfig()
         self._client = None
 
-        if GENAI_AVAILABLE and self.api_key and self.api_key != "demo_gemini_key":
+        if GENAI_AVAILABLE and self.api_key:
             try:
                 self._client = google_genai.Client(api_key=self.api_key)
                 logger.info(f"Initialized GeminiEmbedder with model '{self.config.model_name}'")

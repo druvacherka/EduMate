@@ -18,7 +18,7 @@ from backend.services.goals_engine import goals_engine
 class RecommendationEngine:
     """Calculates deterministic, auditable next learning actions."""
 
-    def get_next_recommendation(self, student_id: int = 1) -> Dict[str, Any]:
+    def get_next_recommendation(self, student_id: int = 1) -> Optional[Dict[str, Any]]:
         """Determine next priority study activity.
 
         Priority order:
@@ -67,8 +67,10 @@ class RecommendationEngine:
 
         # 3. Next learning action from active goal or current topic
         primary_goal = goals[0] if goals else None
-        current_subject = profile.get("current_subject") or (primary_goal.name if primary_goal else "General Learning")
-        current_topic = profile.get("current_topic") or "Fundamental Concepts"
+        current_subject = profile.get("current_subject") or (primary_goal.name if primary_goal else "")
+        current_topic = profile.get("current_topic") or ""
+        if not current_subject and not current_topic:
+            return None
 
         mastery = profile.get("mastery_score", 0.0)
 

@@ -31,99 +31,25 @@ class PlannerEngine:
     """Orchestrates long-term adaptive roadmaps and daily execution tasks."""
 
     def get_or_generate_today_tasks(self, student_id: int = 1) -> List[DailyTaskSchema]:
-        """Fetch existing daily tasks for today, or seed smart defaults tailored to active goals."""
+        """Fetch existing daily tasks for today without creating placeholder work."""
         today_str = date.today().isoformat()
         existing = list_daily_tasks(student_id=student_id, target_date=today_str)
-        if existing:
-            return [
-                DailyTaskSchema(
-                    id=t["id"],
-                    title=t["title"],
-                    subject=t["subject"],
-                    topic=t["topic"],
-                    task_type=t["task_type"],
-                    estimated_minutes=t["estimated_minutes"],
-                    is_completed=bool(t["is_completed"]),
-                    priority=t["priority"],
-                    reason=t.get("reason"),
-                    date_scheduled=t["date_scheduled"],
-                    plan_id=t.get("plan_id"),
-                )
-                for t in existing
-            ]
-
-        # Generate fresh tasks from profile, active goals, and recommendations
-        profile = get_student_profile()
-        goals = [g for g in goals_engine.get_goals(student_id=student_id) if g.is_active]
-        hours = profile.get("daily_study_hours", 2.0)
-
-        tasks_to_create = []
-
-        # 1. Recommendation Task
-        rec = recommendation_engine.get_next_recommendation(student_id=student_id)
-        tasks_to_create.append({
-            "task_type": rec["recommended_action"],
-            "title": f"{rec['recommended_action'].replace('_', ' ').title()}: {rec['topic']}",
-            "subject": rec["subject"],
-            "topic": rec["topic"],
-            "estimated_minutes": rec["estimated_minutes"],
-            "priority": "HIGH",
-            "reason": rec["reason"],
-        })
-
-        # 2. Main subject practice task from first active goal
-        subject_name = profile.get("current_subject") or (goals[0].name if goals else "Core Studies")
-        topic_name = profile.get("current_topic") or "Core Topic Practice"
-        tasks_to_create.append({
-            "task_type": "PRACTICE",
-            "title": f"Practice Problems: {topic_name}",
-            "subject": subject_name,
-            "topic": topic_name,
-            "estimated_minutes": 35,
-            "priority": "HIGH",
-            "reason": "Active curriculum topic milestone.",
-        })
-
-        # 3. Assessment Quiz
-        tasks_to_create.append({
-            "task_type": "QUIZ",
-            "title": f"Adaptive Quiz: {topic_name}",
-            "subject": subject_name,
-            "topic": topic_name,
-            "estimated_minutes": 15,
-            "priority": "NORMAL",
-            "reason": "Verify topic comprehension before moving forward.",
-        })
-
-        # 4. Spaced Revision / Mistakes Review
-        tasks_to_create.append({
-            "task_type": "REVIEW_MISTAKES",
-            "title": "Review Identified Mistakes & Notes",
-            "subject": subject_name,
-            "topic": "Recent Weak Concepts",
-            "estimated_minutes": 15,
-            "priority": "NORMAL",
-            "reason": "Consolidate learning and prevent recurring misconceptions.",
-        })
-
-        created = []
-        for t in tasks_to_create:
-            task_id = f"task-{uuid.uuid4().hex[:8]}"
-            res = insert_daily_task(
-                task_id=task_id,
+        return [
+            DailyTaskSchema(
+                id=t["id"],
                 title=t["title"],
                 subject=t["subject"],
                 topic=t["topic"],
                 task_type=t["task_type"],
                 estimated_minutes=t["estimated_minutes"],
+                is_completed=bool(t["is_completed"]),
                 priority=t["priority"],
-                reason=t["reason"],
-                date_scheduled=today_str,
-                student_id=student_id,
+                reason=t.get("reason"),
+                date_scheduled=t["date_scheduled"],
+                plan_id=t.get("plan_id"),
             )
-            created.append(DailyTaskSchema(**res))
-
-        return created
+            for t in existing
+        ]
 
     def toggle_task(self, task_id: str, student_id: int = 1) -> Optional[DailyTaskSchema]:
         """Mark task completed or incomplete."""
@@ -173,14 +99,16 @@ class PlannerEngine:
             weak_rows = cursor.fetchall()
             priority_weaks = [r["topic"] for r in weak_rows]
 
-        rec = recommendation_engine.get_next_recommendation(student_id=student_id)
+        rec = None
+        if priority_weaks or active_goals or profile.get("current_topic"):
+            rec = recommendation_engine.get_next_recommendation(student_id=student_id)
 
         return DailyDashboardResponse(
             greeting=greeting,
             student_name=profile.get("name", "Student"),
-            education_level=profile.get("education_level", "B.Tech / Engineering"),
-            stream_branch=profile.get("stream_branch", "Computer Science"),
-            available_hours_today=profile.get("daily_study_hours", 2.0),
+            education_level=profile.get("education_level", ""),
+            stream_branch=profile.get("stream_branch", ""),
+            available_hours_today=profile.get("daily_study_hours", 0.0),
             study_streak_days=profile.get("study_streak_days", 0),
             overall_mastery=profile.get("mastery_score", 0.0),
             active_goals=active_goals,

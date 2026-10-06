@@ -73,12 +73,12 @@ class AnalyticsEngine:
             "weakAreas": weak_areas,
             "strongAreas": strong_areas,
             "subjectProgress": subject_progress,
-            "educationLevel": profile.get("education_level", "B.Tech / Engineering"),
+            "educationLevel": profile.get("education_level", ""),
             "institution": profile.get("institution", ""),
-            "streamBranch": profile.get("stream_branch", "Computer Science & Engineering"),
-            "academicYearSemester": profile.get("academic_year_semester", "3rd Year / 5th Sem"),
-            "dailyStudyHours": profile.get("daily_study_hours", 2.0),
-            "onboardingCompleted": bool(profile.get("onboarding_completed", 1)),
+            "streamBranch": profile.get("stream_branch", ""),
+            "academicYearSemester": profile.get("academic_year_semester", ""),
+            "dailyStudyHours": profile.get("daily_study_hours", 0.0),
+            "onboardingCompleted": bool(profile.get("onboarding_completed", 0)),
             "activeGoalsCount": goals_cnt,
         }
 

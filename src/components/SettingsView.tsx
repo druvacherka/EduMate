@@ -11,11 +11,11 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ profile, setProfile, onOpenOnboarding }) => {
   const [name, setName] = useState<string>(profile.name);
-  const [educationLevel, setEducationLevel] = useState<string>(profile.educationLevel || 'B.Tech / Engineering');
+  const [educationLevel, setEducationLevel] = useState<string>(profile.educationLevel || '');
   const [institution, setInstitution] = useState<string>(profile.institution || '');
-  const [streamBranch, setStreamBranch] = useState<string>(profile.streamBranch || 'Computer Science & Engineering');
-  const [academicYearSemester, setAcademicYearSemester] = useState<string>(profile.academicYearSemester || '3rd Year');
-  const [dailyHours, setDailyHours] = useState<number>(profile.dailyStudyHours || 2.0);
+  const [streamBranch, setStreamBranch] = useState<string>(profile.streamBranch || '');
+  const [academicYearSemester, setAcademicYearSemester] = useState<string>(profile.academicYearSemester || '');
+  const [dailyHours, setDailyHours] = useState<number>(profile.dailyStudyHours || 0);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -169,7 +169,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, setProfile,
               </label>
               <input
                 type="text"
-                value={profile.email || 'student@edumate.ai'}
+                value={profile.email || ''}
                 disabled
                 style={{
                   width: '100%',
@@ -259,6 +259,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, setProfile,
                   outline: 'none',
                 }}
               >
+                <option value="">Select education level</option>
                 <option value="Class 10">Class 10 (Secondary School)</option>
                 <option value="Class 11">Class 11 (Higher Secondary)</option>
                 <option value="Class 12 / Intermediate">Class 12 / Intermediate</option>
@@ -286,7 +287,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, setProfile,
               </label>
               <input
                 type="text"
-                placeholder="e.g. Telangana State Board (TG SSC), TS Model School, ZPHS"
+                placeholder="e.g. board, university, college, or school"
                 value={institution}
                 onChange={(e) => setInstitution(e.target.value)}
                 style={{

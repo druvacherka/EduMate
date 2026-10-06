@@ -31,24 +31,24 @@ class QuizQuestionSchema(BaseModel):
     topic: str
 
 class AnalyticsProfileResponse(BaseModel):
-    name: str = "B.Tech Student"
-    email: str = "student@edumate.ai"
+    name: str = "Student"
+    email: str = ""
     level: str = "Beginner"
     language: str = "English"
-    currentSubject: str = "Data Structures & Algorithms"
-    currentTopic: str = "Binary Search Trees"
-    masteryScore: float = 78.5
-    weakAreas: List[str] = Field(default_factory=lambda: ["Tree Balancing", "Graph Traversals", "Recurrence Relations"])
-    strongAreas: List[str] = Field(default_factory=lambda: ["Arrays & HashMaps", "Sorting Algorithms", "Stack Operations"])
-    studyStreakDays: int = 5
+    currentSubject: str = ""
+    currentTopic: str = ""
+    masteryScore: float = 0.0
+    weakAreas: List[str] = Field(default_factory=list)
+    strongAreas: List[str] = Field(default_factory=list)
+    studyStreakDays: int = 0
     subjectProgress: Optional[List[Dict[str, Any]]] = None
-    educationLevel: Optional[str] = "B.Tech / Engineering"
+    educationLevel: Optional[str] = ""
     institution: Optional[str] = ""
-    streamBranch: Optional[str] = "Computer Science & Engineering"
-    academicYearSemester: Optional[str] = "3rd Year / 5th Sem"
-    dailyStudyHours: Optional[float] = 2.0
-    onboardingCompleted: Optional[bool] = True
-    activeGoalsCount: Optional[int] = 3
+    streamBranch: Optional[str] = ""
+    academicYearSemester: Optional[str] = ""
+    dailyStudyHours: Optional[float] = 0.0
+    onboardingCompleted: Optional[bool] = False
+    activeGoalsCount: Optional[int] = 0
 
 
 class RagSearchRequest(BaseModel):
@@ -298,6 +298,5 @@ class OnboardingResponse(BaseModel):
     message: str
     profile: Dict[str, Any]
     active_goals: List[StudentGoalSchema]
-
 
 

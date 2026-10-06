@@ -275,7 +275,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ profile: initialPr
                   <Code2 size={16} />
                 </div>
                 <span style={{ fontWeight: 600, fontSize: '0.92rem', color: 'var(--text-primary)' }}>
-                  {profile.currentSubject || 'Computer Science'}
+                  {profile.currentSubject || 'No subject selected'}
                 </span>
               </div>
 

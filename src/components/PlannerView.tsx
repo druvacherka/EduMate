@@ -14,9 +14,9 @@ interface PlannerViewProps {
 
 export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => {
   const [goals, setGoals] = useState<StudentGoal[]>([]);
-  const [selectedGoalName, setSelectedGoalName] = useState<string>('B.Tech Semester Academics');
-  const [targetDate, setTargetDate] = useState<string>('2026-12-15');
-  const [dailyHours, setDailyHours] = useState<number>(2.5);
+  const [selectedGoalName, setSelectedGoalName] = useState<string>('');
+  const [targetDate, setTargetDate] = useState<string>('');
+  const [dailyHours, setDailyHours] = useState<number>(2.0);
   const [studyPlan, setStudyPlan] = useState<StudyPlan | null>(null);
   const [generating, setGenerating] = useState<boolean>(false);
 
@@ -34,8 +34,13 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
       }
       setDailyHours(goalsList[0].available_hours_per_day || 2.0);
     }
-    // Generate initial plan
-    handleGeneratePlan(goalsList[0]?.name || 'Semester Preparation', targetDate, dailyHours);
+    if (goalsList.length > 0) {
+      handleGeneratePlan(
+        goalsList[0].name,
+        goalsList[0].target_date || '',
+        goalsList[0].available_hours_per_day || 2.0
+      );
+    }
   };
 
   const handleGeneratePlan = async (name: string, dateStr: string, hours: number) => {
@@ -100,17 +105,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
               </option>
             ))}
             {goals.length === 0 && (
-              <>
-                <option value="TG SSC 10/10 GPA (Board Exam 2027)" style={{ background: '#0f172a' }}>
-                  TG SSC 10/10 GPA (Board Exam 2027)
-                </option>
-                <option value="TS POLYCET 2027 (Polytechnic Entrance)" style={{ background: '#0f172a' }}>
-                  TS POLYCET 2027 (Polytechnic Entrance)
-                </option>
-                <option value="TSRJC CET 2027 (Residential Junior Colleges)" style={{ background: '#0f172a' }}>
-                  TSRJC CET 2027 (Residential Junior Colleges)
-                </option>
-              </>
+              <option value="" style={{ background: '#0f172a' }}>
+                Create a goal first
+              </option>
             )}
           </select>
         </div>
@@ -154,7 +151,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
         <div>
           <button
             className="btn-primary"
-            disabled={generating}
+            disabled={generating || !selectedGoalName.trim()}
             onClick={() => handleGeneratePlan(selectedGoalName, targetDate, dailyHours)}
             style={{
               width: '100%',

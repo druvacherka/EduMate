@@ -4,7 +4,7 @@ Calibrates question difficulty and Bloom's cognitive taxonomy depth based on stu
 and builds prompts for MCQ, True/False, and Short Answer question generation.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from services.ai_rag.schemas.quiz_schemas import (
     DifficultyLevel,
     QuestionType,
@@ -58,7 +58,7 @@ class AdaptiveDifficultyScaler:
 
         types_desc = ", ".join(config.allowed_types)
 
-        prompt = f"""Generate an academic assessment quiz for B.Tech engineering students on the topic: '{config.topic}'.
+        prompt = f"""Generate an academic assessment quiz on the topic: '{config.topic}'.
 
 CONFIGURATION:
 - Number of Questions: {config.num_questions}
