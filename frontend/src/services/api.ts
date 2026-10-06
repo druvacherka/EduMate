@@ -11,6 +11,59 @@ import {
 } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000/api';
+const AUTH_TOKEN_KEY = 'edumate.accessToken';
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: { id: number; email: string };
+}
+
+export function getAuthToken(): string | null {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function clearAuthToken(): void {
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+async function fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  const token = getAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await window.fetch(input, { ...init, headers });
+  if (response.status === 401) {
+    clearAuthToken();
+    window.dispatchEvent(new Event('edumate:unauthorized'));
+  }
+  return response;
+}
+
+export async function authenticateAccount(
+  mode: 'login' | 'register',
+  email: string,
+  password: string
+): Promise<AuthResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/${mode}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || 'Authentication failed.');
+  window.localStorage.setItem(AUTH_TOKEN_KEY, data.access_token);
+  return data;
+}
+
+export async function validateAuthToken(): Promise<boolean> {
+  if (!getAuthToken()) return false;
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/me`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
 export interface ChatRequestPayload {
   query: string;
@@ -38,7 +91,6 @@ export interface QuizQuestionData {
   type: 'mcq' | 'tf' | 'short';
   question: string;
   options?: string[];
-  correctAnswer: any;
   explanation: string;
   difficulty: string;
   topic: string;
@@ -112,7 +164,7 @@ export async function fetchStudyMaterials(): Promise<StudyDocument[]> {
 
 export async function uploadStudyDocument(
   file: File,
-  subject: string = 'Computer Science',
+  subject: string = 'General',
   educationLevel: string = 'All',
   curriculum: string = 'General'
 ) {
@@ -189,10 +241,10 @@ export async function fetchStudentProfile(): Promise<StudentProfile & { subjectP
   } catch (err) {
     console.warn('Could not fetch student profile from backend, using empty state:', err);
     return {
-      name: 'Student',
+      name: '',
       email: '',
-      level: 'Beginner',
-      language: 'English',
+      level: '',
+      language: '',
       currentSubject: '',
       currentTopic: '',
       masteryScore: 0.0,
@@ -200,9 +252,10 @@ export async function fetchStudentProfile(): Promise<StudentProfile & { subjectP
       weakAreas: [],
       strongAreas: [],
       subjectProgress: [],
-      educationLevel: 'B.Tech / Engineering',
-      streamBranch: 'Computer Science',
-      dailyStudyHours: 2.0,
+      educationLevel: '',
+      streamBranch: '',
+      dailyStudyHours: 0,
+      onboardingCompleted: false,
     };
   }
 }
@@ -331,23 +384,23 @@ export async function selectStudentGoal(goalId: string): Promise<StudentGoal | n
 }
 
 export async function generateAdaptiveStudyPlan(payload: {
+  goal_id?: string;
   goal_name: string;
   target_date?: string;
-  available_hours_per_day?: number;
+  available_hours_per_day: number;
   current_level?: string;
-}): Promise<StudyPlan | null> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/planner/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    console.warn('Failed to generate adaptive plan:', err);
-    return null;
+  target_level?: string;
+}): Promise<StudyPlan> {
+  const res = await fetch(`${API_BASE_URL}/planner/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorData.detail || `Plan generation failed: ${res.statusText}`);
   }
+  return await res.json();
 }
 
 export async function fetchCurriculumLevels(): Promise<CurriculumLevel[]> {

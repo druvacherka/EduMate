@@ -17,7 +17,6 @@ import {
   ListTodo,
   Target,
   RotateCcw,
-  BarChart3,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,7 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
 }) => {
   const getInitials = (name: string) => {
-    if (!name || name === 'Student') return 'EM';
+    if (!name) return 'EM';
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return name.slice(0, 2).toUpperCase();
@@ -58,7 +57,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const insightItems = [
-    { id: 'analytics' as ActiveTab, label: 'Mastery Analytics', icon: BarChart3 },
     { id: 'settings' as ActiveTab, label: 'Profile & Settings', icon: Settings },
   ];
 
@@ -276,7 +274,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 textOverflow: 'ellipsis',
               }}
             >
-              {profile.name || 'Student'}
+              {profile.name || 'Learner'}
             </div>
             <div
               style={{

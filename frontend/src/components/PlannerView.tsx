@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   RotateCw,
   ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { StudyPlan, StudentGoal } from '../types';
 import { generateAdaptiveStudyPlan, fetchStudentGoals } from '../services/api';
@@ -14,11 +15,13 @@ interface PlannerViewProps {
 
 export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => {
   const [goals, setGoals] = useState<StudentGoal[]>([]);
-  const [selectedGoalName, setSelectedGoalName] = useState<string>('B.Tech Semester Academics');
-  const [targetDate, setTargetDate] = useState<string>('2026-12-15');
-  const [dailyHours, setDailyHours] = useState<number>(2.5);
+  const [selectedGoalId, setSelectedGoalId] = useState<string>('');
+  const [targetDate, setTargetDate] = useState<string>('');
+  const [dailyHours, setDailyHours] = useState<number>(2.0);
   const [studyPlan, setStudyPlan] = useState<StudyPlan | null>(null);
   const [generating, setGenerating] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const selectedGoal = goals.find((goal) => goal.id === selectedGoalId);
 
   useEffect(() => {
     loadGoalsAndDefaultPlan();
@@ -28,26 +31,41 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
     const goalsList = await fetchStudentGoals();
     setGoals(goalsList);
     if (goalsList.length > 0) {
-      setSelectedGoalName(goalsList[0].name);
+      setSelectedGoalId(goalsList[0].id);
       if (goalsList[0].target_date) {
         setTargetDate(goalsList[0].target_date);
       }
-      setDailyHours(goalsList[0].available_hours_per_day || 2.0);
+      setDailyHours(goalsList[0].available_hours_per_day);
     }
-    // Generate initial plan
-    handleGeneratePlan(goalsList[0]?.name || 'Semester Preparation', targetDate, dailyHours);
   };
 
-  const handleGeneratePlan = async (name: string, dateStr: string, hours: number) => {
+  const handleGeneratePlan = async () => {
+    if (!selectedGoal) {
+      setError('Create or select a goal before generating a study plan.');
+      return;
+    }
+
     setGenerating(true);
-    const plan = await generateAdaptiveStudyPlan({
-      goal_name: name,
-      target_date: dateStr,
-      available_hours_per_day: hours,
-      current_level: 'Beginner',
-    });
-    setStudyPlan(plan);
-    setGenerating(false);
+    setError(null);
+    try {
+      const plan = await generateAdaptiveStudyPlan({
+        goal_id: selectedGoal.id,
+        goal_name: selectedGoal.name,
+        target_date: targetDate,
+        available_hours_per_day: dailyHours,
+        current_level: selectedGoal.current_level || undefined,
+        target_level: selectedGoal.target_level || undefined,
+      });
+      setStudyPlan(plan);
+    } catch (generationError) {
+      setError(
+        generationError instanceof Error
+          ? generationError.message
+          : 'Could not generate the adaptive study plan.'
+      );
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
@@ -58,7 +76,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
           EduMate Adaptive Planner
         </h1>
         <p style={{ color: '#94a3b8', fontSize: '0.95rem', margin: 0 }}>
-          Algorithmic multi-week roadmap generator that dynamically adjusts based on retention, deadlines, and study velocity.
+          Gemini generates a study roadmap from your goal, deadline, available hours, learning level, and recorded weak areas.
         </p>
       </div>
 
@@ -81,8 +99,17 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
             Target Goal / Examination:
           </label>
           <select
-            value={selectedGoalName}
-            onChange={(e) => setSelectedGoalName(e.target.value)}
+            value={selectedGoalId}
+            onChange={(e) => {
+              const goal = goals.find((item) => item.id === e.target.value);
+              setSelectedGoalId(e.target.value);
+              if (goal) {
+                setTargetDate(goal.target_date || '');
+                setDailyHours(goal.available_hours_per_day);
+              }
+              setStudyPlan(null);
+              setError(null);
+            }}
             style={{
               width: '100%',
               background: 'rgba(15, 23, 42, 0.8)',
@@ -95,22 +122,14 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
             }}
           >
             {goals.map((g) => (
-              <option key={g.id} value={g.name} style={{ background: '#0f172a' }}>
+              <option key={g.id} value={g.id} style={{ background: '#0f172a' }}>
                 {g.name}
               </option>
             ))}
             {goals.length === 0 && (
-              <>
-                <option value="TG SSC 10/10 GPA (Board Exam 2027)" style={{ background: '#0f172a' }}>
-                  TG SSC 10/10 GPA (Board Exam 2027)
-                </option>
-                <option value="TS POLYCET 2027 (Polytechnic Entrance)" style={{ background: '#0f172a' }}>
-                  TS POLYCET 2027 (Polytechnic Entrance)
-                </option>
-                <option value="TSRJC CET 2027 (Residential Junior Colleges)" style={{ background: '#0f172a' }}>
-                  TSRJC CET 2027 (Residential Junior Colleges)
-                </option>
-              </>
+              <option value="" style={{ background: '#0f172a' }}>
+                Create a goal first
+              </option>
             )}
           </select>
         </div>
@@ -154,8 +173,8 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
         <div>
           <button
             className="btn-primary"
-            disabled={generating}
-            onClick={() => handleGeneratePlan(selectedGoalName, targetDate, dailyHours)}
+            disabled={generating || !selectedGoalId}
+            onClick={handleGeneratePlan}
             style={{
               width: '100%',
               display: 'flex',
@@ -170,6 +189,26 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToTab }) => 
           </button>
         </div>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 16px',
+            marginBottom: 24,
+            borderRadius: 10,
+            color: '#fb7185',
+            background: 'rgba(244, 63, 94, 0.1)',
+            border: '1px solid rgba(244, 63, 94, 0.25)',
+          }}
+        >
+          <AlertTriangle size={17} />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Plan Status Overview */}
       {studyPlan && (

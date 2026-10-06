@@ -9,7 +9,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-from database import record_voice_session, list_voice_sessions
+from backend.database import record_voice_session, list_voice_sessions
 from backend.schemas import VoiceSessionCreateRequest, VoiceSessionResponse
 
 

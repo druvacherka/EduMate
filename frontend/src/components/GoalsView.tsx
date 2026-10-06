@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Target,
   Calendar,
   Clock,
   Sparkles,
@@ -9,7 +8,6 @@ import {
   RotateCw,
   ArrowRight,
   BookOpen,
-  Award,
   Zap,
   Check,
   Compass,
@@ -22,6 +20,20 @@ import {
   toggleDailyTask,
 } from '../services/api';
 
+type GoalDetailSection = {
+  name: string;
+  weight: string;
+  desc: string;
+};
+
+type GoalDetails = {
+  badge: string;
+  color: string;
+  examPattern: string;
+  sections: GoalDetailSection[];
+  strategy: string;
+};
+
 interface GoalsViewProps {
   onNavigateToTab: (tab: any, topicContext?: string) => void;
 }
@@ -31,7 +43,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
   const [activeGoal, setActiveGoal] = useState<StudentGoal | null>(null);
   const [tasks, setTasks] = useState<DailyStudyTask[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadGoalData();
@@ -53,7 +64,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
   };
 
   const handleSelectGoal = async (goalId: string) => {
-    setSelectingId(goalId);
     const updated = await selectStudentGoal(goalId);
     if (updated) {
       setGoals((prev) =>
@@ -70,7 +80,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
         setTasks(dash.today_tasks || []);
       }
     }
-    setSelectingId(null);
   };
 
   const handleToggleTask = async (taskId: string) => {
@@ -89,57 +98,15 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
     return diffDays > 0 ? diffDays : 0;
   };
 
-  // Goal-specific metadata & blueprints
-  const getGoalDetails = (goalName: string) => {
-    if (goalName.includes('POLYCET')) {
-      return {
-        badge: 'State Polytechnic Entrance',
-        color: '#f59e0b',
-        examPattern: '120 Questions • 120 Minutes • No Negative Marks',
-        sections: [
-          { name: 'Mathematics', weight: '60 Marks', desc: 'Sets, Real Numbers, Progressions, Coordinate Geometry' },
-          { name: 'Physics', weight: '30 Marks', desc: 'Optics, Lens Maker Formula, Current Electricity' },
-          { name: 'Chemistry', weight: '30 Marks', desc: 'Atomic Structure, Quantum Numbers, Chemical Bonding' },
-        ],
-        strategy: 'High-speed MCQ solving (sub-45s per question). Master formula shortcuts and direct elimination.',
-      };
-    } else if (goalName.includes('TSRJC')) {
-      return {
-        badge: 'Residential Junior Colleges Entrance',
-        color: '#8b5cf6',
-        examPattern: '150 Questions • 150 Minutes • State Merit Admission',
-        sections: [
-          { name: 'Mathematics', weight: '50 Marks', desc: 'Proof theorems, Similar Triangles, Trigonometry' },
-          { name: 'Physical Sciences', weight: '50 Marks', desc: 'Kirchhoff Laws, Carbon Compounds, Metallurgy' },
-          { name: 'English & Biology', weight: '50 Marks', desc: 'Attitude is Altitude reading comprehension & Life Processes' },
-        ],
-        strategy: 'Concept depth and precision. Top 500 state rank grants full residential scholarship.',
-      };
-    } else if (goalName.includes('NMMS')) {
-      return {
-        badge: 'Talent Scholarship Examination',
-        color: '#ec4899',
-        examPattern: '180 Marks • 2 Papers (90 MAT + 90 SAT)',
-        sections: [
-          { name: 'Mental Ability (MAT)', weight: '90 Marks', desc: 'Number series, analogies, Venn diagrams, pattern puzzles' },
-          { name: 'Scholastic Aptitude (SAT)', weight: '90 Marks', desc: 'Science (35M), Social (35M), Mathematics (20M)' },
-        ],
-        strategy: 'Balanced practice across analytical reasoning and factual recall of SCERT syllabus.',
-      };
-    } else {
-      // Default: TG SSC 10/10 GPA
-      return {
-        badge: 'Telangana Board Examination',
-        color: '#38bdf8',
-        examPattern: 'All 6 Papers • Internal & External • Target: 10/10 GPA',
-        sections: [
-          { name: 'Mathematics', weight: '100 Marks', desc: '14 Chapters incl. Logarithms, Sets, GP, Slopes, Ogives' },
-          { name: 'Physical & Biological Sciences', weight: '100 Marks', desc: 'Paper 1 (Physics/Chem 50M) + Paper 2 (Bio 50M)' },
-          { name: 'Social Studies & Languages', weight: '300 Marks', desc: 'Telangana Movement (1956-2014), English & Telugu' },
-        ],
-        strategy: 'Step-by-step presentation, accurate formulas, labelled scientific diagrams, and Telugu/English discourses.',
-      };
-    }
+  // Goal metadata derived from the user's saved goal fields.
+  const getGoalDetails = (goalName: string): GoalDetails => {
+    return {
+      badge: goalName || 'Learning Goal',
+      color: '#38bdf8',
+      examPattern: activeGoal?.target_exam || activeGoal?.goal_type || 'Self-paced learning target',
+      sections: [],
+      strategy: 'Use EduMate to create tasks, generate quizzes, revise weak areas, and ask the tutor about this goal.',
+    };
   };
 
   const currentDetails = activeGoal ? getGoalDetails(activeGoal.name) : null;
@@ -165,14 +132,14 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
             }}
           >
             <Compass size={14} />
-            <span>TELANGANA STATE BOARD SSC (CLASS 10)</span>
+            <span>GOAL WORKSPACE</span>
           </div>
         </div>
         <h1 style={{ fontSize: '1.9rem', fontWeight: 800, color: '#f8fafc', margin: '0 0 6px 0' }}>
           Select Your Target Goal
         </h1>
         <p style={{ color: '#94a3b8', fontSize: '0.95rem', margin: 0 }}>
-          Choose your primary target. EduMate immediately customizes your daily study tasks, revision priorities, and AI tutor according to your selection.
+          Choose your primary target. EduMate uses your saved goals, revision data, and quiz history to guide the dashboard.
         </p>
       </div>
 
@@ -196,7 +163,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
                 marginBottom: 12,
               }}
             >
-              Available Telangana Goals (Click to Focus)
+              Available Goals
             </label>
             <div
               style={{
@@ -208,8 +175,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
               {goals.map((g) => {
                 const isSelected = activeGoal?.id === g.id;
                 const details = getGoalDetails(g.name);
-                const isProcessing = selectingId === g.id;
-
                 return (
                   <div
                     key={g.id}
@@ -386,6 +351,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
               </div>
 
               {/* Sections & Weightage Breakdown */}
+              {currentDetails.sections.length > 0 && (
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 12px 0' }}>
                   Syllabus Focus & Marks Weightage
@@ -412,6 +378,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Quick Action Buttons */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, paddingTop: 16, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -475,7 +442,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ onNavigateToTab }) => {
                   Today's Scheduled Tasks (Tailored to Active Goal)
                 </h3>
                 <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
-                  These tasks automatically re-adjust whenever you switch between TG SSC, POLYCET, TSRJC, or NMMS.
+                  These tasks come from your planner, revision queue, quizzes, and saved study activity.
                 </p>
               </div>
               <span

@@ -42,11 +42,11 @@ export const CareerExplorerView: React.FC<CareerExplorerViewProps> = ({ onNaviga
     await createStudentGoal({
       name: `${path.title} Preparation`,
       goal_type: 'career',
-      target_exam: path.primary_exams[0] || 'Technical Assessment',
+      target_exam: path.primary_exams[0] || '',
       priority: 'HIGH',
       available_hours_per_day: 2.0,
-      current_level: 'Beginner',
-      target_level: 'Advanced',
+      current_level: '',
+      target_level: '',
     });
     setAdoptedMessage(`Successfully adopted "${path.title}" into your active goals!`);
     setTimeout(() => setAdoptedMessage(null), 4000);

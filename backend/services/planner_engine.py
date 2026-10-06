@@ -4,17 +4,17 @@ Generates structured multi-week study plans and dynamically updates daily study 
 based on student available hours, active goals, and retention status.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
+import math
 from typing import Any, Dict, List, Optional
 import uuid
 
-from database import (
+from backend.database import (
     get_student_profile,
     list_daily_tasks,
-    insert_daily_task,
     toggle_daily_task,
-    insert_study_plan,
-    list_weak_areas,
+    get_db_connection,
+    list_student_goals,
 )
 from backend.schemas import (
     DailyDashboardResponse,
@@ -25,106 +25,32 @@ from backend.schemas import (
 )
 from backend.services.goals_engine import goals_engine
 from backend.services.recommendation_engine import recommendation_engine
-from backend.services.curriculum_engine import curriculum_engine
+from ai_rag.llm_client import llm_client
 
 
 class PlannerEngine:
     """Orchestrates long-term adaptive roadmaps and daily execution tasks."""
 
     def get_or_generate_today_tasks(self, student_id: int = 1) -> List[DailyTaskSchema]:
-        """Fetch existing daily tasks for today, or seed smart defaults tailored to active goals."""
+        """Fetch existing daily tasks for today without creating placeholder work."""
         today_str = date.today().isoformat()
         existing = list_daily_tasks(student_id=student_id, target_date=today_str)
-        if existing:
-            return [
-                DailyTaskSchema(
-                    id=t["id"],
-                    title=t["title"],
-                    subject=t["subject"],
-                    topic=t["topic"],
-                    task_type=t["task_type"],
-                    estimated_minutes=t["estimated_minutes"],
-                    is_completed=bool(t["is_completed"]),
-                    priority=t["priority"],
-                    reason=t.get("reason"),
-                    date_scheduled=t["date_scheduled"],
-                    plan_id=t.get("plan_id"),
-                )
-                for t in existing
-            ]
-
-        # Generate fresh tasks from profile, active goals, and recommendations
-        profile = get_student_profile()
-        goals = [g for g in goals_engine.get_goals(student_id=student_id) if g.is_active]
-        hours = profile.get("daily_study_hours", 2.0)
-
-        tasks_to_create = []
-
-        # 1. Recommendation Task
-        rec = recommendation_engine.get_next_recommendation(student_id=student_id)
-        tasks_to_create.append({
-            "task_type": rec["recommended_action"],
-            "title": f"{rec['recommended_action'].replace('_', ' ').title()}: {rec['topic']}",
-            "subject": rec["subject"],
-            "topic": rec["topic"],
-            "estimated_minutes": rec["estimated_minutes"],
-            "priority": "HIGH",
-            "reason": rec["reason"],
-        })
-
-        # 2. Main subject practice task from first active goal
-        subject_name = profile.get("current_subject") or (goals[0].name if goals else "Core Studies")
-        topic_name = profile.get("current_topic") or "Core Topic Practice"
-        tasks_to_create.append({
-            "task_type": "PRACTICE",
-            "title": f"Practice Problems: {topic_name}",
-            "subject": subject_name,
-            "topic": topic_name,
-            "estimated_minutes": 35,
-            "priority": "HIGH",
-            "reason": "Active curriculum topic milestone.",
-        })
-
-        # 3. Assessment Quiz
-        tasks_to_create.append({
-            "task_type": "QUIZ",
-            "title": f"Adaptive Quiz: {topic_name}",
-            "subject": subject_name,
-            "topic": topic_name,
-            "estimated_minutes": 15,
-            "priority": "NORMAL",
-            "reason": "Verify topic comprehension before moving forward.",
-        })
-
-        # 4. Spaced Revision / Mistakes Review
-        tasks_to_create.append({
-            "task_type": "REVIEW_MISTAKES",
-            "title": "Review Identified Mistakes & Notes",
-            "subject": subject_name,
-            "topic": "Recent Weak Concepts",
-            "estimated_minutes": 15,
-            "priority": "NORMAL",
-            "reason": "Consolidate learning and prevent recurring misconceptions.",
-        })
-
-        created = []
-        for t in tasks_to_create:
-            task_id = f"task-{uuid.uuid4().hex[:8]}"
-            res = insert_daily_task(
-                task_id=task_id,
+        return [
+            DailyTaskSchema(
+                id=t["id"],
                 title=t["title"],
                 subject=t["subject"],
                 topic=t["topic"],
                 task_type=t["task_type"],
                 estimated_minutes=t["estimated_minutes"],
+                is_completed=bool(t["is_completed"]),
                 priority=t["priority"],
-                reason=t["reason"],
-                date_scheduled=today_str,
-                student_id=student_id,
+                reason=t.get("reason"),
+                date_scheduled=t["date_scheduled"],
+                plan_id=t.get("plan_id"),
             )
-            created.append(DailyTaskSchema(**res))
-
-        return created
+            for t in existing
+        ]
 
     def toggle_task(self, task_id: str, student_id: int = 1) -> Optional[DailyTaskSchema]:
         """Mark task completed or incomplete."""
@@ -147,7 +73,7 @@ class PlannerEngine:
 
     def get_daily_dashboard(self, student_id: int = 1) -> DailyDashboardResponse:
         """Construct full daily study dashboard with greeting, tasks, and progress."""
-        profile = get_student_profile()
+        profile = get_student_profile(student_id)
         goals = goals_engine.get_goals(student_id=student_id)
         active_goals = [g for g in goals if g.is_active]
         today_tasks = self.get_or_generate_today_tasks(student_id=student_id)
@@ -167,18 +93,26 @@ class PlannerEngine:
         total_count = len(today_tasks)
         remaining_minutes = sum(t.estimated_minutes for t in today_tasks if not t.is_completed)
 
-        # Fetch weak areas from MongoDB
-        weak_rows = list_weak_areas(is_mastered=False, limit=4)
-        priority_weaks = [r["topic"] for r in weak_rows if r.get("topic")]
+        # Fetch weak areas
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT topic FROM weak_areas WHERE student_id = ? AND is_mastered = 0 ORDER BY mistake_count DESC LIMIT 4;",
+                (student_id,),
+            )
+            weak_rows = cursor.fetchall()
+            priority_weaks = [r["topic"] for r in weak_rows]
 
-        rec = recommendation_engine.get_next_recommendation(student_id=student_id)
+        rec = None
+        if priority_weaks or active_goals or profile.get("current_topic"):
+            rec = recommendation_engine.get_next_recommendation(student_id=student_id)
 
         return DailyDashboardResponse(
             greeting=greeting,
             student_name=profile.get("name", "Student"),
-            education_level=profile.get("education_level", "B.Tech / Engineering"),
-            stream_branch=profile.get("stream_branch", "Computer Science"),
-            available_hours_today=profile.get("daily_study_hours", 2.0),
+            education_level=profile.get("education_level", ""),
+            stream_branch=profile.get("stream_branch", ""),
+            available_hours_today=profile.get("daily_study_hours", 0.0),
             study_streak_days=profile.get("study_streak_days", 0),
             overall_mastery=profile.get("mastery_score", 0.0),
             active_goals=active_goals,
@@ -190,63 +124,119 @@ class PlannerEngine:
             recent_recommendation=rec,
         )
 
-    def generate_adaptive_plan(self, req: GeneratePlanRequest, student_id: int = 1) -> StudyPlanSchema:
-        """Generate dynamic multi-week adaptive roadmap based on goal and target date."""
+    async def generate_adaptive_plan(
+        self,
+        req: GeneratePlanRequest,
+        student_id: int = 1,
+    ) -> StudyPlanSchema:
+        """Generate and persist a Gemini roadmap using this student's goal and progress."""
         plan_id = f"plan-{uuid.uuid4().hex[:8]}"
-        hours_per_day = req.available_hours_per_day or 2.0
-
-        # Calculate weeks
         today = date.today()
-        if req.target_date:
+        profile = get_student_profile(student_id)
+        goals = list_student_goals(student_id=student_id)
+        goal = next((item for item in goals if item["id"] == req.goal_id), None) if req.goal_id else None
+        if req.goal_id and goal is None:
+            raise LookupError("The selected goal was not found.")
+
+        goal_name = goal["name"] if goal else req.goal_name.strip()
+        target_date = (
+            req.target_date
+            if req.target_date is not None
+            else (goal.get("target_date") if goal else None)
+        )
+        target_date = target_date or None
+        hours_per_day = req.available_hours_per_day
+        current_level = (
+            req.current_level
+            or (goal.get("current_level") if goal else None)
+            or profile.get("level")
+            or "Beginner"
+        )
+        target_level = (
+            req.target_level
+            or (goal.get("target_level") if goal else None)
+            or "Advanced"
+        )
+
+        if target_date:
             try:
-                target_dt = date.fromisoformat(req.target_date)
-                delta_days = max(14, (target_dt - today).days)
-                num_weeks = min(16, max(4, delta_days // 7))
-            except Exception:
-                num_weeks = 6
+                target_dt = date.fromisoformat(target_date)
+            except ValueError as exc:
+                raise ValueError("Target date must use YYYY-MM-DD format.") from exc
+            days_until_target = (target_dt - today).days
+            if days_until_target <= 0:
+                raise ValueError("Target date must be in the future.")
+            num_weeks = min(16, max(1, math.ceil(days_until_target / 7)))
         else:
             num_weeks = 6
 
-        weekly_items = []
-        themes = [
-            ("Foundational Concepts & Invariants", ["Core Principles", "Standard Definitions", "Basic Syntax"]),
-            ("Intermediate Problem Solving & Applications", ["Classic Algorithms", "Edge Cases", "Implementation"]),
-            ("Advanced Architecture & Complex Problems", ["Performance Bottlenecks", "System Design", "Complex Datasets"]),
-            ("Integrated Multi-Topic Applications", ["Cross-Topic Questions", "Synthesis Problems", "Analytical Reasoning"]),
-            ("Exam Simulations & Speed Optimization", ["Timed Practice", "Previous Year Papers", "Shortcuts"]),
-            ("Comprehensive Weak-Area Review & Refinement", ["Error Log Deep-Dive", "High-Weightage Formulas", "Final Readiness"]),
-        ]
-
-        total_hours = 0.0
-        for i in range(num_weeks):
-            theme_idx = i % len(themes)
-            theme_title, topics = themes[theme_idx]
-            week_hrs = round(hours_per_day * 5, 1)  # 5 study days per week
-            total_hours += week_hrs
-            weekly_items.append(
-                StudyPlanItemSchema(
-                    week_number=i + 1,
-                    theme=f"Week {i + 1}: {theme_title}",
-                    focus_topics=[f"{req.goal_name} - {t}" for t in topics],
-                    target_milestone=f"Achieve >={min(90, 60 + i * 5)}% mastery on {topics[0]}.",
-                    estimated_hours=week_hrs,
-                )
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT topic FROM weak_areas
+                WHERE student_id = ? AND is_mastered = 0
+                ORDER BY mistake_count DESC, last_mistake_date DESC
+                LIMIT 5;
+                """,
+                (student_id,),
             )
+            weak_areas = [row["topic"] for row in cursor.fetchall()]
 
-        insert_study_plan(
-            plan_id=plan_id,
-            goal_id=req.goal_id,
-            title=f"Adaptive Plan: {req.goal_name}",
-            target_date=req.target_date,
-            total_hours_planned=total_hours,
-            student_id=student_id,
+        generated_weeks = await llm_client.generate_adaptive_study_plan(
+            goal_name=goal_name,
+            target_date=target_date,
+            available_hours_per_day=hours_per_day,
+            current_level=current_level,
+            target_level=target_level,
+            education_level=profile.get("education_level", ""),
+            subject=profile.get("current_subject", ""),
+            weak_areas=weak_areas,
+            mastery_score=float(profile.get("mastery_score", 0.0)),
+            num_weeks=num_weeks,
         )
+        if len(generated_weeks) != num_weeks:
+            raise ValueError(
+                f"Gemini returned {len(generated_weeks)} weeks; expected {num_weeks}."
+            )
+        if [week["week_number"] for week in generated_weeks] != list(range(1, num_weeks + 1)):
+            raise ValueError("Gemini returned an invalid adaptive plan week sequence.")
+
+        weekly_hours = round(hours_per_day * 5, 1)
+        weekly_items = [
+            StudyPlanItemSchema(
+                week_number=week["week_number"],
+                theme=week["theme"],
+                focus_topics=week["focus_topics"],
+                target_milestone=week["target_milestone"],
+                estimated_hours=weekly_hours,
+            )
+            for week in generated_weeks
+        ]
+        total_hours = round(sum(item.estimated_hours for item in weekly_items), 1)
+        title = f"Adaptive Plan: {goal_name}"
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if req.goal_id:
+                cursor.execute(
+                    """
+                    UPDATE study_plans SET status = 'SUPERSEDED'
+                    WHERE student_id = ? AND goal_id = ? AND status = 'ACTIVE';
+                    """,
+                    (student_id, req.goal_id),
+                )
+            cursor.execute("""
+                INSERT OR REPLACE INTO study_plans (id, student_id, goal_id, title, target_date, total_hours_planned, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?);
+            """, (plan_id, student_id, req.goal_id, title, target_date, total_hours, today.isoformat()))
+            conn.commit()
 
         return StudyPlanSchema(
             id=plan_id,
             goal_id=req.goal_id,
-            title=f"Adaptive Plan: {req.goal_name}",
-            target_date=req.target_date,
+            title=title,
+            target_date=target_date,
             total_hours_planned=total_hours,
             status="ACTIVE",
             weekly_breakdown=weekly_items,

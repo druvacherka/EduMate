@@ -14,8 +14,9 @@ import { CareerExplorerView } from './components/CareerExplorerView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SettingsView } from './components/SettingsView';
 import { OnboardingModal } from './components/OnboardingModal';
+import { AuthView } from './components/AuthView';
 
-import { fetchStudentProfile } from './services/api';
+import { clearAuthToken, fetchStudentProfile, getAuthToken, validateAuthToken } from './services/api';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -23,32 +24,25 @@ export function App() {
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(Boolean(getAuthToken()));
 
   const [profile, setProfile] = useState<StudentProfile>({
-    name: 'Druva',
-    email: 'druva@edumate.ai',
-    level: 'Beginner',
-    language: 'English',
-    currentSubject: 'Mathematics',
-    currentTopic: 'Real Numbers: Logarithms & Euclid Division Lemma',
-    masteryScore: 72.0,
-    weakAreas: [
-      'Logarithms: Laws & Change of Base (Ex 1.5)',
-      'Lens Maker Formula Numerical & Sign Conventions',
-      'Quantum Numbers (n, l, m, s) & Electronic Configuration',
-    ],
-    strongAreas: [
-      'Sets: Venn Diagrams & Set Difference (A-B)',
-      'Nutrition: Human Digestive System & Enzymes',
-      'Telangana Movement: State Formation June 2, 2014',
-    ],
-    studyStreakDays: 3,
-    educationLevel: 'Telangana State Board SSC (Class 10)',
-    institution: 'Telangana State Model School',
-    streamBranch: 'TG SSC (English & Telugu Medium)',
-    academicYearSemester: 'Class 10th SSC (2026-2027)',
-    dailyStudyHours: 3.0,
-    onboardingCompleted: true,
+    name: '',
+    email: '',
+    level: '',
+    language: '',
+    currentSubject: '',
+    currentTopic: '',
+    masteryScore: 0.0,
+    weakAreas: [],
+    strongAreas: [],
+    studyStreakDays: 0,
+    educationLevel: '',
+    institution: '',
+    streamBranch: '',
+    academicYearSemester: '',
+    dailyStudyHours: 0,
+    onboardingCompleted: false,
   });
 
   const loadProfile = () => {
@@ -63,8 +57,26 @@ export function App() {
   };
 
   useEffect(() => {
-    loadProfile();
+    let mounted = true;
+    const handleUnauthorized = () => setIsAuthenticated(false);
+    window.addEventListener('edumate:unauthorized', handleUnauthorized);
+    validateAuthToken().then((valid) => {
+      if (mounted) setIsAuthenticated(valid);
+    });
+    return () => {
+      mounted = false;
+      window.removeEventListener('edumate:unauthorized', handleUnauthorized);
+    };
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) loadProfile();
+  }, [isAuthenticated]);
+
+  const handleLogout = () => {
+    clearAuthToken();
+    setIsAuthenticated(false);
+  };
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed((prev) => !prev);
@@ -97,6 +109,10 @@ export function App() {
     setActiveTab('quizzes');
   };
 
+  if (!isAuthenticated) {
+    return <AuthView onAuthenticated={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="app-container" data-theme={theme}>
       {/* Sidebar Navigation */}
@@ -120,6 +136,7 @@ export function App() {
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={toggleSidebar}
           onOpenOnboarding={() => setIsOnboardingOpen(true)}
+          onLogout={handleLogout}
         />
 
         <main style={{ flex: 1, overflowY: 'auto', position: 'relative', padding: activeTab === 'tutor' ? 0 : '24px 32px' }}>
@@ -131,10 +148,7 @@ export function App() {
           )}
 
           {activeTab === 'curriculum' && (
-            <CurriculumView
-              onSelectTopicForChat={handleSelectTopicForChat}
-              onSelectTopicForQuiz={handleSelectTopicForQuiz}
-            />
+            <CurriculumView />
           )}
 
           {activeTab === 'tutor' && (

@@ -1,5 +1,5 @@
-"""Qdrant Vector Store package for EduMate RAG Knowledge Engine."""
+"""PostgreSQL vector store package for EduMate RAG Knowledge Engine."""
 
-from ai_rag.vector_store.qdrant_client import QdrantVectorStore, qdrant_store
+from ai_rag.vector_store.postgres_vector_store import PostgresVectorStore, postgres_vector_store
 
-__all__ = ["QdrantVectorStore", "qdrant_store"]
+__all__ = ["PostgresVectorStore", "postgres_vector_store"]

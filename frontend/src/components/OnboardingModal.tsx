@@ -14,21 +14,18 @@ interface OnboardingModalProps {
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose, onCompleted }) => {
   const [step, setStep] = useState<number>(1);
-  const [name, setName] = useState<string>('Druva');
-  const [language, setLanguage] = useState<string>('English');
-  const [educationLevel, setEducationLevel] = useState<string>('Telangana State Board SSC (Class 10)');
+  const [name, setName] = useState<string>('');
+  const [language, setLanguage] = useState<string>('');
+  const [educationLevel, setEducationLevel] = useState<string>('');
 
   // Academic details
-  const [institution, setInstitution] = useState<string>('Telangana State Model School');
-  const [streamBranch, setStreamBranch] = useState<string>('TG SSC (English & Telugu Medium)');
-  const [academicYearSemester, setAcademicYearSemester] = useState<string>('Class 10th SSC (2026-2027)');
+  const [institution, setInstitution] = useState<string>('');
+  const [streamBranch, setStreamBranch] = useState<string>('');
+  const [academicYearSemester, setAcademicYearSemester] = useState<string>('');
 
   // Goals & hours
-  const [dailyHours, setDailyHours] = useState<number>(3.0);
-  const [selectedGoals, setSelectedGoals] = useState<string[]>([
-    'TG SSC 10/10 GPA (Board Exam 2027)',
-    'TS POLYCET 2027 (Polytechnic Entrance)',
-  ]);
+  const [dailyHours, setDailyHours] = useState<number>(2.0);
+  const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   if (!isOpen) return null;
@@ -49,8 +46,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
     setSubmitting(true);
     try {
       await submitStudentOnboarding({
-        name: name.trim() || 'Student',
-        preferred_language: language,
+        name: name.trim(),
+        preferred_language: language || 'English',
         education_level: educationLevel,
         institution: institution.trim(),
         stream_branch: streamBranch,
@@ -208,6 +205,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                     outline: 'none',
                   }}
                 >
+                  <option value="" style={{ background: '#0f172a' }}>Select a language</option>
                   <option value="English" style={{ background: '#0f172a' }}>English</option>
                   <option value="Hindi" style={{ background: '#0f172a' }}>Hindi</option>
                   <option value="Telugu" style={{ background: '#0f172a' }}>Telugu</option>
@@ -237,11 +235,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                         type="button"
                         onClick={() => {
                           setEducationLevel(lvl);
-                          // Auto set appropriate branch
-                          if (lvl.includes('10')) setStreamBranch('General (All Subjects)');
-                          else if (lvl.includes('11') || lvl.includes('12')) setStreamBranch('Science (MPC)');
-                          else if (lvl.includes('B.Tech')) setStreamBranch('Computer Science & Engineering');
-                          else setStreamBranch('General Studies');
+                          setStreamBranch('');
                         }}
                         style={{
                           background: isSelected ? 'rgba(56, 189, 248, 0.18)' : 'rgba(30, 41, 59, 0.6)',
@@ -418,22 +412,17 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(isClass10
-                    ? [
-                        'TG SSC 10/10 GPA (Board Exam 2027)',
-                        'TS POLYCET 2027 (Polytechnic Entrance)',
-                        'TSRJC CET 2027 (Residential Junior Colleges)',
-                        'TG NMMS / Talent Scholarship',
-                      ]
+                    ? ['Board Exam Preparation', 'Entrance Exam Preparation', 'Scholarship Exam Preparation']
                     : isIntermediate
-                    ? ['Class 12 Board Exams', 'JEE Main & Advanced', 'NEET Entrance Prep', 'Aptitude & Logic']
+                    ? ['Class 12 Board Exams', 'Engineering Entrance Prep', 'Medical Entrance Prep', 'Aptitude & Logic']
                     : isBTech
                     ? [
-                        'B.Tech Semester Academics',
-                        'GATE CSE Preparation',
-                        'Product Placement & DSA',
-                        'System Design & Architecture',
+                        'Semester Academics',
+                        'Graduate Entrance Preparation',
+                        'Placement Preparation',
+                        'Technical Skill Development',
                       ]
-                    : ['UPSC Civil Services Prelims', 'Banking PO Examination', 'General Aptitude Mastery']
+                    : ['Competitive Exam Preparation', 'General Aptitude Mastery', 'Skill Development']
                   ).map((goalOption) => {
                     const isChecked = selectedGoals.includes(goalOption);
                     return (

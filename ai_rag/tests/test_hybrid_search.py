@@ -1,9 +1,9 @@
-"""Unit tests for Qdrant Hybrid Search & BM25 Reciprocal Rank Fusion (RRF)."""
+"""Unit tests for hybrid vector search & BM25 Reciprocal Rank Fusion (RRF)."""
 
 import pytest
 from ai_rag.schemas.vector_schemas import HybridSearchQuery, SearchResult
 from ai_rag.vector_store.hybrid_search import BM25Scorer, HybridSearchEngine
-from ai_rag.vector_store.qdrant_client import QdrantVectorStore
+from ai_rag.tests.in_memory_vector_store import InMemoryVectorStore
 
 
 def test_bm25_tokenizer_and_scoring():
@@ -21,7 +21,7 @@ def test_bm25_tokenizer_and_scoring():
 
 
 def test_reciprocal_rank_fusion():
-    store = QdrantVectorStore(location=":memory:")
+    store = InMemoryVectorStore()
     engine = HybridSearchEngine(store)
 
     dense_results = [
@@ -61,7 +61,7 @@ def test_reciprocal_rank_fusion():
 
 
 def test_hybrid_search_end_to_end():
-    store = QdrantVectorStore(location=":memory:")
+    store = InMemoryVectorStore()
     engine = HybridSearchEngine(store)
 
     from ai_rag.schemas.chunk_schemas import TextChunk
@@ -90,7 +90,7 @@ def test_hybrid_search_end_to_end():
         [0.9] * 768,
     ]
 
-    store.upsert_chunks(chunks=chunks, vectors=fake_vectors, document_name="Physics.pdf")
+    store.upsert_chunks(chunks=chunks, vectors=fake_vectors, document_name="Physics.pdf", owner_id=1)
 
     query = HybridSearchQuery(
         query_text="Newton mechanics motion",
@@ -98,8 +98,52 @@ def test_hybrid_search_end_to_end():
         top_k=2,
         dense_weight=0.7,
         score_threshold=0.0,
+        owner_id=1,
     )
 
     results = engine.search(query)
     assert len(results) >= 1
     assert results[0].chunk_id == "chunk_a"
+
+
+def test_keyword_search_finds_candidate_outside_dense_results():
+    from ai_rag.schemas.chunk_schemas import TextChunk
+
+    store = InMemoryVectorStore()
+    engine = HybridSearchEngine(store)
+    chunks = [
+        TextChunk(
+            chunk_id="dense-only",
+            text="An unrelated passage about entropy.",
+            page_number=1,
+            char_count=37,
+            token_estimate=9,
+        ),
+        TextChunk(
+            chunk_id="keyword-only",
+            text="Newton's laws describe motion and classical mechanics.",
+            page_number=2,
+            char_count=54,
+            token_estimate=14,
+        ),
+    ]
+    store.upsert_chunks(
+        chunks=chunks,
+        vectors=[[1.0] * 768, [-1.0] * 768],
+        document_name="Physics.pdf",
+        owner_id=9,
+    )
+
+    results = engine.search(
+        HybridSearchQuery(
+            query_text="Newton motion mechanics",
+            query_vector=[1.0] * 768,
+            top_k=2,
+            score_threshold=0.3,
+            owner_id=9,
+        )
+    )
+
+    keyword_match = next(result for result in results if result.chunk_id == "keyword-only")
+    assert keyword_match.bm25_score > 0
+    assert keyword_match.dense_score == 0

@@ -138,7 +138,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
                 <Loader2 size={36} className="spin-slow" color="#3b82f6" />
                 <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                  Parsing & Indexing into Qdrant Vector DB...
+                  Parsing & Indexing into PostgreSQL...
                 </span>
               </div>
             ) : (
@@ -148,7 +148,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
                   Click to Upload Lecture Notes (PDF)
                 </h3>
                 <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Supports PDF files up to 50MB. Text is semantically chunked and indexed into Qdrant Vector Store.
+                  Supports PDF files up to 50MB. Text is semantically chunked, embedded, and indexed in PostgreSQL.
                 </p>
                 <button
                   className="btn btn-primary"

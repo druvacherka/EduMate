@@ -26,77 +26,58 @@ EduMate is an intelligent, multilingual AI personal tutor platform designed for 
      └────┬────┘         └────┬─────┘        └─────┬─────┘
           │                   │                    │
           ▼                   ▼                    ▼
-     Gemini LLM          Qdrant Vector          MongoDB
-     (STT / TTS)           Database             Database
+     Gemini LLM       PostgreSQL + pgvector   PostgreSQL
+     (STT / TTS)        Vector Search          Database
 ```
 
----
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
 
-## 📂 Project Structure
+## Backend database setup
 
-```text
-EduMate/
-├── frontend/               # React 19 + TypeScript + Vite UI
-│   ├── src/                # Views, components, API client, types
-│   ├── public/             # Static assets (favicons, etc.)
-│   ├── package.json        # Frontend scripts and dependencies
-│   └── vite.config.ts      # Vite dev server & build configuration
-│
-├── backend/                # FastAPI Application & Domain Services
-│   ├── main.py             # API Gateway routers & WebSocket endpoints
-│   ├── config.py           # Application settings & environment config
-│   ├── schemas.py          # Pydantic v2 request/response schemas
-│   ├── services/           # Analytics, Quiz, Planner, Revision engines
-│   ├── tests/              # Backend endpoint & unit tests
-│   └── requirements.txt    # Python dependencies for backend
-│
-├── database/               # Dedicated MongoDB Database Layer
-│   ├── connection.py       # PyMongo client & connection lifecycle
-│   ├── models.py           # Document schemas & type definitions
-│   ├── repository.py       # CRUD operations & queries
-│   ├── seed_data.py        # Seed datasets & initial curriculum
-│   ├── vector_store.py     # MongoDB document vector persistence
-│   └── __init__.py         # Package exports
-│
-├── ai_rag/                 # AI & Knowledge Retrieval Engine
-│   ├── llm_client.py       # Google Gemini 1.5 client wrapper
-│   ├── document_processing/# PDF parsing (PyMuPDF) & text chunking
-│   ├── embeddings/         # Gemini text-embedding-004 integration
-│   ├── prompts/            # Socratic prompts & adaptive difficulty scaler
-│   ├── validators/         # LaTeX, code snippet, and citation checkers
-│   ├── vector_store/       # Qdrant client & BM25 hybrid search
-│   └── tests/              # AI & RAG unit test suite
-│
-├── temp_uploads/           # Local workspace for temporary PDF uploads (ignored)
-└── README.md
-```
+The backend uses PostgreSQL for persistent, multi-user storage. Copy `.env.example`
+to `.env`, set `DATABASE_URL` to your PostgreSQL connection string, and generate a
+strong signing key for `JWT_SECRET_KEY` (for example,
+`python -c "import secrets; print(secrets.token_urlsafe(48))"`). Create the
+`edumate` database, install backend dependencies with
+`pip install -r backend/requirements.txt`, then start the API with
+`python -m uvicorn backend.main:app --reload`.
 
----
+The API creates or upgrades its PostgreSQL tables at startup and enables the
+`vector` extension. The PostgreSQL server must have pgvector installed, and the
+database role must be allowed to enable the extension. Embeddings use
+`vector(768)` with a cosine HNSW index and are filtered by the authenticated
+student profile. Retrieval uses Gemini `gemini-embedding-001` with
+`RETRIEVAL_DOCUMENT` and `RETRIEVAL_QUERY` task types, plus PostgreSQL full-text
+keyword candidates fused with vector results. Set `GEMINI_API_KEY` and restart
+the backend to enable semantic embeddings; without a working key, uploads and
+searches fail rather than saving misleading fallback vectors. Accounts use
+Argon2 password hashes and bearer tokens.
 
-## 🚀 Getting Started
+To copy existing SQLite records, first create an account in EduMate, then run
+`python -m backend.migrate_sqlite_to_postgres --email your-account@example.com`.
+The script reads `backend/edumate.db` by default and commits the relational data
+to that account in one transaction. Back up the SQLite file before migrating.
+Existing Qdrant embeddings are not imported by this script. Re-upload your
+source PDFs after PostgreSQL is configured; uploads are embedded and stored in
+the PostgreSQL `study_embeddings` table. The old local Qdrant store was
+ephemeral, so embeddings that were not otherwise persisted cannot be recovered.
+After changing the embedding model or replacing previously generated fallback
+vectors, re-upload existing PDFs so their stored vectors match query embeddings.
 
-### Prerequisites
-* **Python**: 3.11+
-* **Node.js**: 18+ (Node 20+ recommended)
-* **MongoDB**: Running locally at `mongodb://localhost:27017`
+Quiz generation requires a working Gemini API key. Questions are generated from
+the submitted topic and difficulty; the API does not use sample-question
+fallbacks. Gemini generation uses `GEMINI_FAST_MODEL`, which defaults to
+`gemini-3.8-flash`. If that model is unavailable, it tries the models listed in
+`GEMINI_QUIZ_FALLBACK_MODELS`
+(`gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.6-flash` by default).
 
-### 1. Run the Backend API
-From the root directory:
-```bash
-python -m uvicorn backend.main:app --reload --port 8000
-```
-* **API Documentation**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-* **Health Check**: [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
+Socratic tutoring also requires a working Gemini API key. It uses
+`GEMINI_MODEL` (default `gemini-3.1-flash-lite`) and tries the fast and quiz
+fallback models if the selected model is temporarily unavailable. It does not
+return simulated tutor responses when Gemini is unavailable.
 
-### 2. Run the Frontend
-In a separate terminal:
-```bash
-cd frontend
-npm run dev
-```
-* **Web UI**: [http://localhost:5173](http://localhost:5173)
-
-### 3. Run Automated Tests
-```bash
-python -m pytest backend/tests/ ai_rag/tests/
-```
+Adaptive study plans are generated by Gemini when the learner selects
+**Recalculate Plan**. The request includes the selected goal, target date,
+daily study hours, goal/profile learning levels, subject, mastery, and recorded
+weak areas. No generated plan is replaced with preset sample weeks when Gemini
+is unavailable.

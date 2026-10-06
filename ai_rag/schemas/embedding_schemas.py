@@ -8,7 +8,7 @@ class EmbeddingConfig(BaseModel):
     """Configuration parameters for Gemini embedding generator."""
 
     model_name: str = Field(
-        "text-embedding-004", description="Google Gemini embedding model identifier"
+        "gemini-embedding-001", description="Google Gemini embedding model identifier"
     )
     vector_dimension: int = Field(
         768, ge=1, description="Expected vector embedding dimensionality"
@@ -21,6 +21,10 @@ class EmbeddingConfig(BaseModel):
     )
     retry_delay_seconds: float = Field(
         1.0, ge=0.1, description="Initial retry delay in seconds for exponential backoff"
+    )
+    allow_fallback: bool = Field(
+        False,
+        description="Allow deterministic non-semantic vectors for explicit offline tests only",
     )
 
 

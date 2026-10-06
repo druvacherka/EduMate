@@ -1,7 +1,7 @@
 """Quiz State Machine and Automated Corrective Evaluation Engine for EduMate.
 
 Manages quiz lifecycle transitions (CREATED -> ACTIVE -> SUBMITTED -> EVALUATED),
-evaluates answers, logs student mistakes into weak areas, and updates mastery metrics via MongoDB.
+evaluates answers, logs student mistakes into weak areas, and updates mastery metrics.
 """
 
 import json
@@ -10,15 +10,10 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from ai_rag.llm_client import llm_client
-from database import (
-    get_student_profile,
-    create_quiz_session,
-    get_quiz_session,
-    update_quiz_session_evaluation,
-)
+from backend.database import get_db_connection, get_student_profile
+
 
 from ai_rag.prompts.adaptive_scaler import adaptive_difficulty_scaler
-from ai_rag.validators.json_repair import json_repair_middleware
 
 
 class QuizState(str, Enum):
@@ -35,9 +30,9 @@ class QuizStateMachine:
     async def create_session(
         self,
         topic: str,
+        student_id: int,
         difficulty: str = "Medium",
         num_questions: int = 3,
-        adaptive: bool = True,
     ) -> Dict[str, Any]:
         """Generate questions and initialize a new quiz session in CREATED state.
 
@@ -45,51 +40,58 @@ class QuizStateMachine:
             topic: Technical subject topic (e.g. 'Binary Search Trees').
             difficulty: 'Easy', 'Medium', or 'Hard'.
             num_questions: Total questions to generate.
-            adaptive: Whether to calibrate difficulty using student's historical mastery.
 
         Returns:
             Dict containing session metadata and generated questions.
         """
         session_id = f"quiz-{uuid.uuid4().hex[:8]}"
 
-        # Check student mastery to calibrate difficulty if adaptive
-        calibrated_diff = difficulty
-        if adaptive:
-            profile = get_student_profile(1)
-            mastery = profile.get("mastery_score")
-            if mastery is not None:
-                calibrated_diff = adaptive_difficulty_scaler.determine_adaptive_difficulty(
-                    mastery_score=float(mastery),
-                    requested_difficulty=difficulty,
-                )
-
         # Generate questions using LLM client
         questions = await llm_client.generate_structured_quiz(
             topic=topic,
             num_questions=num_questions,
-            difficulty=calibrated_diff,
+            difficulty=difficulty,
         )
 
-        create_quiz_session(
-            session_id=session_id,
-            topic=topic,
-            difficulty=calibrated_diff,
-            total_questions=len(questions),
-            questions=questions,
-        )
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO quiz_sessions (
+                    id, student_id, topic, difficulty, total_questions, score, percentage,
+                    status, questions_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, 0, 0.0, ?, ?, ?);
+            """, (
+                session_id,
+                student_id,
+                topic,
+                difficulty,
+                len(questions),
+                QuizState.ACTIVE.value,
+                json.dumps(questions),
+                datetime.now(timezone.utc).isoformat(),
+            ))
+            conn.commit()
 
         return {
             "session_id": session_id,
             "topic": topic,
-            "difficulty": calibrated_diff,
+            "difficulty": difficulty,
             "status": QuizState.ACTIVE.value,
-            "questions": questions,
+            "questions": [
+                {
+                    key: value
+                    for key, value in question.items()
+                    if key not in {"correctAnswer", "correct_answer", "rubric_keywords"}
+                }
+                for question in questions
+            ],
         }
 
     def evaluate_submission(
         self,
         session_id: str,
         user_answers: Dict[str, Any],
+        student_id: int,
     ) -> Dict[str, Any]:
         """Process student answers through the state machine and evaluate performance.
 
@@ -103,175 +105,115 @@ class QuizStateMachine:
             Evaluation summary with total score, percentage, question breakdowns,
             and updated weak areas.
         """
-        session = get_quiz_session(session_id)
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM quiz_sessions WHERE id = ? AND student_id = ?;", (session_id, student_id))
+            session = cursor.fetchone()
 
-        if not session:
-            # Fallback for ad-hoc submissions
-            return self._evaluate_adhoc_answers(user_answers)
+            if not session:
+                raise LookupError("Quiz session was not found.")
 
-        raw_questions = session.get("questions", [])
-        if isinstance(raw_questions, str):
-            questions = json.loads(raw_questions)
-        else:
-            questions = raw_questions
+            questions = json.loads(session["questions_json"])
+            topic = session["topic"]
 
-        topic = session.get("topic", "Computer Science")
+            # Calculate score and build detailed feedback
+            score = 0
+            question_results: List[Dict[str, Any]] = []
+            mistaken_topics: List[str] = []
 
-        # Calculate score and build detailed feedback
-        score = 0
-        question_results: List[Dict[str, Any]] = []
-        mistaken_topics: List[str] = []
+            for q in questions:
+                q_id = str(q.get("id"))
+                correct_ans = q.get("correctAnswer")
+                user_ans = user_answers.get(q_id)
 
-        for q in questions:
-            q_id = str(q.get("id"))
-            correct_ans = q.get("correctAnswer")
-            user_ans = user_answers.get(q_id)
+                # Evaluate answer based on question type
+                is_correct = False
+                explanation = q.get("explanation", "")
 
-            # Evaluate answer based on question type
-            is_correct = False
-            explanation = q.get("explanation", "")
+                if q.get("type") == "short":
+                    eval_res = adaptive_difficulty_scaler.evaluate_short_answer_heuristic(
+                        student_answer=str(user_ans or ""),
+                        reference_answer=str(correct_ans or ""),
+                        rubric_keywords=q.get("rubric_keywords") or [str(correct_ans)],
+                    )
+                    is_correct = eval_res["is_correct"]
+                    explanation = f"{eval_res['feedback']} {explanation}"
+                else:
+                    if user_ans is not None:
+                        if str(user_ans).strip().lower() == str(correct_ans).strip().lower():
+                            is_correct = True
 
-            if q.get("type") == "short":
-                eval_res = adaptive_difficulty_scaler.evaluate_short_answer_heuristic(
-                    student_answer=str(user_ans or ""),
-                    reference_answer=str(correct_ans or ""),
-                    rubric_keywords=q.get("rubric_keywords") or [str(correct_ans)],
-                )
-                is_correct = eval_res["is_correct"]
-                explanation = f"{eval_res['feedback']} {explanation}"
-            else:
-                is_correct = self._check_answer_match(
-                    user_ans=user_ans,
-                    correct_ans=correct_ans,
-                    options=q.get("options"),
-                )
+                if is_correct:
+                    score += 1
+                else:
+                    mistaken_topics.append(q.get("topic", topic))
 
-            if is_correct:
-                score += 1
-            else:
-                mistaken_topics.append(q.get("topic", topic))
+                question_results.append({
+                    "id": q_id,
+                    "question": q.get("question"),
+                    "type": q.get("type"),
+                    "options": q.get("options"),
+                    "user_answer": user_ans,
+                    "correct_answer": correct_ans,
+                    "is_correct": is_correct,
+                    "explanation": explanation,
+                })
 
-            question_results.append({
-                "id": q_id,
-                "question": q.get("question"),
-                "type": q.get("type"),
-                "options": q.get("options"),
-                "user_answer": user_ans,
-                "correct_answer": correct_ans,
-                "is_correct": is_correct,
-                "explanation": explanation,
-            })
+            total = len(questions)
+            percentage = round((score / max(total, 1)) * 100.0, 1)
 
-        total = len(questions)
-        percentage = round((score / max(total, 1)) * 100.0, 1)
+            # Update session in DB
+            completed_at = datetime.now(timezone.utc).isoformat()
+            cursor.execute("""
+                UPDATE quiz_sessions
+                SET score = ?, percentage = ?, status = ?, user_answers_json = ?, completed_at = ?
+                WHERE id = ? AND student_id = ?;
+            """, (score, percentage, QuizState.EVALUATED.value, json.dumps(user_answers), completed_at, session_id, student_id))
 
-        # Update session, weak areas, and dynamic student mastery in MongoDB
-        update_quiz_session_evaluation(
-            session_id=session_id,
-            score=score,
-            percentage=percentage,
-            user_answers=user_answers,
-            mistaken_topics=mistaken_topics,
-            topic=topic,
-        )
+            profile = get_student_profile(student_id)
+            subject = profile.get("current_subject") or session["topic"]
 
-        return {
-            "session_id": session_id,
-            "status": QuizState.EVALUATED.value,
-            "score": score,
-            "total_questions": total,
-            "percentage": percentage,
-            "mistakes_count": len(mistaken_topics),
-            "mistaken_topics": list(set(mistaken_topics)),
-            "results": question_results,
-        }
+            # Update Weak Areas and Strong Areas
+            for m_topic in set(mistaken_topics):
+                cursor.execute("""
+                    INSERT INTO weak_areas (student_id, topic, subject, mistake_count, last_mistake_date)
+                    VALUES (?, ?, ?, 1, ?)
+                    ON CONFLICT(student_id, topic) DO UPDATE SET
+                        mistake_count = weak_areas.mistake_count + 1,
+                        last_mistake_date = ?;
+                """, (student_id, m_topic, subject, completed_at, completed_at))
 
-    def _check_answer_match(
-        self,
-        user_ans: Any,
-        correct_ans: Any,
-        options: Optional[List[str]] = None,
-    ) -> bool:
-        """Robustly compare student answer against reference answer.
+            if percentage >= 70:
+                cursor.execute("""
+                    INSERT INTO strong_areas (student_id, topic, subject, success_count)
+                    VALUES (?, ?, ?, 1)
+                    ON CONFLICT(student_id, topic) DO UPDATE SET
+                        success_count = strong_areas.success_count + 1;
+                """, (student_id, topic, subject))
 
-        Handles:
-        - Exact normalized string match (ignoring whitespace and case)
-        - Boolean mappings ("true", "false", True, False, 1, 0)
-        - Index lookups (e.g. user_ans=1, options=["True", "False"], correct_ans="False")
-        - Option letter lookups ("A", "B", "C", "D")
-        - Option text equality
-        """
-        if user_ans is None or correct_ans is None:
-            return False
+            # Adjust student mastery score dynamically
+            delta = 2.5 if percentage >= 70 else -1.5
+            cursor.execute("""
+                UPDATE student_profile
+                SET mastery_score = CASE
+                    WHEN mastery_score + ? < 10.0 THEN 10.0
+                    WHEN mastery_score + ? > 100.0 THEN 100.0
+                    ELSE mastery_score + ?
+                END
+                WHERE id = ?;
+            """, (delta, delta, delta, student_id))
 
-        u_str = str(user_ans).strip().lower()
-        c_str = str(correct_ans).strip().lower()
+            conn.commit()
 
-        # 1. Exact string match
-        if u_str == c_str:
-            return True
-
-        # 2. Boolean normalization
-        bool_map = {
-            "true": True,
-            "false": False,
-            "1": True,
-            "0": False,
-        }
-        if u_str in bool_map and c_str in bool_map:
-            if bool_map[u_str] == bool_map[c_str]:
-                return True
-
-        # 3. Option-based resolution for MCQs and True/False
-        if options and isinstance(options, list) and len(options) > 0:
-            opt_count = len(options)
-
-            def resolve_opt(val: Any):
-                val_str = str(val).strip()
-                # Check integer index: 0, 1, 2, ...
-                if val_str.isdigit():
-                    idx = int(val_str)
-                    if 0 <= idx < opt_count:
-                        return idx, options[idx].strip().lower()
-                # Check letter A, B, C, D
-                if len(val_str) == 1 and val_str.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-                    idx = ord(val_str.upper()) - ord("A")
-                    if 0 <= idx < opt_count:
-                        return idx, options[idx].strip().lower()
-                # Check full text match against one of the options
-                for i, opt in enumerate(options):
-                    if str(opt).strip().lower() == val_str.lower():
-                        return i, str(opt).strip().lower()
-                return None, val_str.lower()
-
-            u_idx, u_opt_text = resolve_opt(user_ans)
-            c_idx, c_opt_text = resolve_opt(correct_ans)
-
-            # Matches if both resolved to the same option index
-            if u_idx is not None and c_idx is not None and u_idx == c_idx:
-                return True
-
-            # Matches if the resolved option texts match
-            if u_opt_text and c_opt_text and u_opt_text == c_opt_text:
-                return True
-
-        return False
-
-    def _evaluate_adhoc_answers(self, user_answers: Dict[str, Any]) -> Dict[str, Any]:
-        """Fallback evaluation for offline/client generated questions."""
-        total = len(user_answers)
-        score = sum(1 for v in user_answers.values() if v in [0, 1, "True"])
-        pct = round((score / max(total, 1)) * 100.0, 1)
-        return {
-            "session_id": f"quiz-adhoc",
-            "status": QuizState.EVALUATED.value,
-            "score": score,
-            "total_questions": total,
-            "percentage": pct,
-            "mistakes_count": total - score,
-            "mistaken_topics": [],
-            "results": [],
-        }
-
+            return {
+                "session_id": session_id,
+                "status": QuizState.EVALUATED.value,
+                "score": score,
+                "total_questions": total,
+                "percentage": percentage,
+                "mistakes_count": len(mistaken_topics),
+                "mistaken_topics": list(set(mistaken_topics)),
+                "results": question_results,
+            }
 
 quiz_state_machine = QuizStateMachine()

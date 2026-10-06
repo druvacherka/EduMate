@@ -5,10 +5,9 @@ import {
   Volume2,
   VolumeX,
   Flame,
-  Coins,
   PanelLeftOpen,
   Sparkles,
-  GraduationCap,
+  LogOut,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -21,6 +20,7 @@ interface NavbarProps {
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   onOpenOnboarding?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -33,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isSidebarCollapsed = false,
   onToggleSidebar,
   onOpenOnboarding,
+  onLogout,
 }) => {
   const handleLanguageChange = (lang: Language) => {
     setProfile((prev) => ({ ...prev, language: lang }));
@@ -41,8 +42,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleLevelChange = (level: LearningLevel) => {
     setProfile((prev) => ({ ...prev, level: level }));
   };
-
-  const tokenPoints = Math.round(profile.masteryScore * 10);
 
   return (
     <header
@@ -59,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         userSelect: 'none',
       }}
     >
-      {/* Left: Sidebar Toggle & Education Level Badge */}
+      {/* Left: Sidebar Toggle & Academic Context Action */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {isSidebarCollapsed && onToggleSidebar && (
           <button
@@ -81,31 +80,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <PanelLeftOpen size={18} color="#60a5fa" />
           </button>
         )}
-
-        {/* Education Level Pill */}
-        <div
-          onClick={onOpenOnboarding}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(56, 189, 248, 0.1)',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
-            borderRadius: '20px',
-            padding: '4px 12px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          title="Click to change education level or academic context"
-        >
-          <GraduationCap size={15} color="#38bdf8" />
-          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#38bdf8' }}>
-            {profile.educationLevel || 'B.Tech / Engineering'}
-          </span>
-          {profile.streamBranch && (
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>• {profile.streamBranch}</span>
-          )}
-        </div>
 
         {onOpenOnboarding && (
           <button
@@ -191,6 +165,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               fontFamily: 'var(--font-main)',
             }}
           >
+            <option value="" style={{ background: '#111418' }}>
+              Select language
+            </option>
             <option value="English" style={{ background: '#111418' }}>
               English
             </option>
@@ -225,25 +202,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>{isVoiceActive ? 'Voice ON' : 'Voice Off'}</span>
         </button>
 
-        {/* Gold Tokens Pill */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '5px 10px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-            fontSize: '0.82rem',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-          }}
-          title="Mastery Points"
-        >
-          <Coins size={15} color="#fbbf24" />
-          <span>{tokenPoints}</span>
-        </div>
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Sign out"
+            aria-label="Sign out"
+            style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-secondary)', padding: 6, cursor: 'pointer' }}
+          >
+            <LogOut size={16} />
+          </button>
+        )}
 
         {/* Fire Streak Badge */}
         <div

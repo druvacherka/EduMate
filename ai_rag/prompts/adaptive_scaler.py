@@ -58,7 +58,7 @@ class AdaptiveDifficultyScaler:
 
         types_desc = ", ".join(config.allowed_types)
 
-        prompt = f"""Generate an academic assessment quiz for B.Tech engineering students on the topic: '{config.topic}'.
+        prompt = f"""Generate an academic assessment quiz on the topic: '{config.topic}'.
 
 CONFIGURATION:
 - Number of Questions: {config.num_questions}

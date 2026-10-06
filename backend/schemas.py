@@ -1,5 +1,5 @@
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Literal
+from pydantic import BaseModel, Field, field_validator
 
 class SocraticChatRequest(BaseModel):
     query: str
@@ -7,6 +7,18 @@ class SocraticChatRequest(BaseModel):
     language: str = "English"  # 'English' | 'Hindi' | 'Telugu'
     conversation_history: Optional[List[Dict[str, str]]] = Field(default_factory=list)
     document_id: Optional[str] = None
+
+
+class AccountCredentials(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=12, max_length=128)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: Dict[str, Any]
+
 
 class SocraticChatResponse(BaseModel):
     response: str
@@ -16,9 +28,17 @@ class SocraticChatResponse(BaseModel):
     citations: Optional[List[Dict[str, Any]]] = None
 
 class QuizGenerationRequest(BaseModel):
-    topic: str
-    num_questions: int = 3
-    difficulty: str = "Medium"
+    topic: str = Field(..., min_length=1, max_length=200)
+    num_questions: int = Field(3, ge=1, le=10)
+    difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"
+
+    @field_validator("topic")
+    @classmethod
+    def normalize_topic(cls, value: str) -> str:
+        topic = value.strip()
+        if not topic:
+            raise ValueError("Topic must not be blank.")
+        return topic
 
 class QuizQuestionSchema(BaseModel):
     id: str
@@ -31,24 +51,24 @@ class QuizQuestionSchema(BaseModel):
     topic: str
 
 class AnalyticsProfileResponse(BaseModel):
-    name: str = "B.Tech Student"
-    email: str = "student@edumate.ai"
+    name: str = "Student"
+    email: str = ""
     level: str = "Beginner"
     language: str = "English"
-    currentSubject: str = "Data Structures & Algorithms"
-    currentTopic: str = "Binary Search Trees"
-    masteryScore: float = 78.5
-    weakAreas: List[str] = Field(default_factory=lambda: ["Tree Balancing", "Graph Traversals", "Recurrence Relations"])
-    strongAreas: List[str] = Field(default_factory=lambda: ["Arrays & HashMaps", "Sorting Algorithms", "Stack Operations"])
-    studyStreakDays: int = 5
+    currentSubject: str = ""
+    currentTopic: str = ""
+    masteryScore: float = 0.0
+    weakAreas: List[str] = Field(default_factory=list)
+    strongAreas: List[str] = Field(default_factory=list)
+    studyStreakDays: int = 0
     subjectProgress: Optional[List[Dict[str, Any]]] = None
-    educationLevel: Optional[str] = "B.Tech / Engineering"
+    educationLevel: Optional[str] = ""
     institution: Optional[str] = ""
-    streamBranch: Optional[str] = "Computer Science & Engineering"
-    academicYearSemester: Optional[str] = "3rd Year / 5th Sem"
-    dailyStudyHours: Optional[float] = 2.0
-    onboardingCompleted: Optional[bool] = True
-    activeGoalsCount: Optional[int] = 3
+    streamBranch: Optional[str] = ""
+    academicYearSemester: Optional[str] = ""
+    dailyStudyHours: Optional[float] = 0.0
+    onboardingCompleted: Optional[bool] = False
+    activeGoalsCount: Optional[int] = 0
 
 
 class RagSearchRequest(BaseModel):
@@ -206,10 +226,11 @@ class StudyPlanSchema(BaseModel):
 
 class GeneratePlanRequest(BaseModel):
     goal_id: Optional[str] = None
-    goal_name: str
+    goal_name: str = Field(..., min_length=1, max_length=200)
     target_date: Optional[str] = None
-    available_hours_per_day: float = 2.0
-    current_level: str = "Beginner"
+    available_hours_per_day: float = Field(2.0, gt=0, le=24)
+    current_level: Optional[str] = None
+    target_level: Optional[str] = None
 
 
 class CurriculumLevelSchema(BaseModel):
@@ -237,7 +258,7 @@ class CurriculumHierarchyResponse(BaseModel):
 
 
 class RevisionItemSchema(BaseModel):
-    id: int | str
+    id: int
     subject: str
     topic: str
     learned_date: str
@@ -250,7 +271,7 @@ class RevisionItemSchema(BaseModel):
 
 
 class CompleteRevisionRequest(BaseModel):
-    item_id: int | str
+    item_id: int
     score: float = 100.0
 
 
@@ -298,6 +319,3 @@ class OnboardingResponse(BaseModel):
     message: str
     profile: Dict[str, Any]
     active_goals: List[StudentGoalSchema]
-
-
-

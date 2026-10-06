@@ -1,14 +1,12 @@
-"""Hybrid Search engine combining Qdrant Dense Vector search with BM25 Keyword scoring.
+"""Hybrid search combining PostgreSQL dense-vector search with BM25 keyword scoring.
 
 Uses Reciprocal Rank Fusion (RRF) to merge dense vector similarity results and keyword matching scores.
 """
 
 import math
 import re
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from ai_rag.schemas.vector_schemas import HybridSearchQuery, HybridSearchResult, SearchResult
-from ai_rag.vector_store.qdrant_client import QdrantVectorStore
-
 
 class BM25Scorer:
     """Lightweight in-memory BM25 tokenizer and ranker for text chunks."""
@@ -69,9 +67,9 @@ class BM25Scorer:
 
 
 class HybridSearchEngine:
-    """Orchestrates hybrid dense + BM25 search over Qdrant vector store."""
+    """Orchestrates hybrid dense + BM25 search over the configured vector store."""
 
-    def __init__(self, vector_store: QdrantVectorStore, rrf_k: int = 60) -> None:
+    def __init__(self, vector_store: Any, rrf_k: int = 60) -> None:
         self.vector_store = vector_store
         self.rrf_k = rrf_k
         self.bm25_scorer = BM25Scorer()
@@ -80,6 +78,7 @@ class HybridSearchEngine:
         self,
         dense_results: List[SearchResult],
         bm25_scores: Dict[str, float],
+        keyword_results: Optional[List[SearchResult]] = None,
         dense_weight: float = 0.6,
         top_k: int = 5,
         score_threshold: float = 0.0,
@@ -89,7 +88,7 @@ class HybridSearchEngine:
         RRF_score = dense_weight * (1 / (rrf_k + dense_rank)) + (1 - dense_weight) * (1 / (rrf_k + bm25_rank))
 
         Args:
-            dense_results: List of SearchResult from Qdrant vector search.
+            dense_results: List of SearchResult from the configured vector store.
             bm25_scores: Dict mapping chunk_id to BM25 score.
             dense_weight: Weight given to dense vector ranking (0.0 to 1.0).
             top_k: Max results to return.
@@ -98,39 +97,59 @@ class HybridSearchEngine:
         Returns:
             Sorted list of HybridSearchResult.
         """
-        # Map chunk_id to dense result
-        chunk_map: Dict[str, SearchResult] = {res.chunk_id: res for res in dense_results}
+        chunk_map: Dict[str, SearchResult] = {
+            result.chunk_id: result for result in dense_results
+        }
+        keyword_map = {
+            result.chunk_id: result for result in (keyword_results or [])
+        }
 
-        # Rank dense results (1-indexed)
         dense_ranks: Dict[str, int] = {
             res.chunk_id: rank + 1 for rank, res in enumerate(dense_results)
         }
 
-        # Rank BM25 results (1-indexed, sorted by BM25 score descending)
-        sorted_bm25 = sorted(bm25_scores.items(), key=lambda x: x[1], reverse=True)
-        bm25_ranks: Dict[str, int] = {
-            chunk_id: rank + 1 for rank, (chunk_id, score) in enumerate(sorted_bm25) if score > 0
+        sorted_bm25_ids = [
+            chunk_id
+            for chunk_id, score in sorted(
+                bm25_scores.items(), key=lambda item: item[1], reverse=True
+            )
+            if score > 0
+        ]
+        keyword_order = [
+            result.chunk_id
+            for result in (keyword_results or [])
+            if result.chunk_id not in sorted_bm25_ids
+        ]
+        bm25_ranks = {
+            chunk_id: rank + 1
+            for rank, chunk_id in enumerate(sorted_bm25_ids + keyword_order)
         }
 
         bm25_weight = 1.0 - dense_weight
-        all_chunk_ids: Set[str] = set(dense_ranks.keys()).union(set(bm25_ranks.keys()))
+        all_chunk_ids: Set[str] = (
+            set(dense_ranks) | set(bm25_ranks) | set(keyword_map)
+        )
 
         hybrid_results: List[HybridSearchResult] = []
 
         for chunk_id in all_chunk_ids:
             dense_res = chunk_map.get(chunk_id)
-            if not dense_res:
+            keyword_res = keyword_map.get(chunk_id)
+            result = dense_res or keyword_res
+            if result is None:
                 continue
 
-            d_rank = dense_ranks.get(chunk_id, 1000)
-            b_rank = bm25_ranks.get(chunk_id, 1000)
-
-            # RRF calculation
-            dense_rrf = 1.0 / (self.rrf_k + d_rank)
-            bm25_rrf = 1.0 / (self.rrf_k + b_rank)
-            rrf_score = (dense_weight * dense_rrf) + (bm25_weight * bm25_rrf)
-
-            # Normalized combined score (0.0 - 1.0 scale approx)
+            dense_rrf = (
+                dense_weight / (self.rrf_k + dense_ranks[chunk_id])
+                if chunk_id in dense_ranks
+                else 0.0
+            )
+            bm25_rrf = (
+                bm25_weight / (self.rrf_k + bm25_ranks[chunk_id])
+                if chunk_id in bm25_ranks
+                else 0.0
+            )
+            rrf_score = dense_rrf + bm25_rrf
             normalized_score = min(1.0, rrf_score * (self.rrf_k + 1))
 
             if normalized_score >= score_threshold:
@@ -138,18 +157,17 @@ class HybridSearchEngine:
                     HybridSearchResult(
                         chunk_id=chunk_id,
                         score=round(normalized_score, 4),
-                        document_name=dense_res.document_name,
-                        page_number=dense_res.page_number,
-                        text_snippet=dense_res.text_snippet,
-                        section_title=dense_res.section_title,
-                        dense_score=round(dense_res.score, 4),
+                        document_name=result.document_name,
+                        page_number=result.page_number,
+                        text_snippet=result.text_snippet,
+                        section_title=result.section_title,
+                        dense_score=round(dense_res.score, 4) if dense_res else 0.0,
                         bm25_score=round(bm25_scores.get(chunk_id, 0.0), 4),
                         rrf_score=round(rrf_score, 6),
                     )
                 )
 
-        # Sort by RRF score descending
-        hybrid_results.sort(key=lambda x: x.rrf_score, reverse=True)
+        hybrid_results.sort(key=lambda result: (-result.rrf_score, result.chunk_id))
         return hybrid_results[:top_k]
 
     def search(self, query: HybridSearchQuery) -> List[HybridSearchResult]:
@@ -161,31 +179,51 @@ class HybridSearchEngine:
         Returns:
             List of HybridSearchResult items.
         """
-        # 1. Fetch dense candidates from Qdrant
+        # 1. Fetch dense candidates from the configured vector store
         from ai_rag.schemas.vector_schemas import SearchQuery
 
         dense_query = SearchQuery(
             query_vector=query.query_vector,
-            top_k=query.top_k * 3,  # Over-fetch for rank fusion candidate pool
+            top_k=min(50, query.top_k * 3),  # Over-fetch for rank fusion candidate pool
             score_threshold=0.0,
             subject_filter=query.subject_filter,
             topic_filter=query.topic_filter,
+            owner_id=query.owner_id,
         )
         dense_results = self.vector_store.search_similar(dense_query)
 
-        if not dense_results:
+        search_keyword_candidates = getattr(
+            self.vector_store, "search_keyword_candidates", None
+        )
+        if search_keyword_candidates is not None:
+            keyword_results = search_keyword_candidates(
+                query_text=query.query_text,
+                owner_id=query.owner_id,
+                top_k=max(50, query.top_k * 10),
+                subject_filter=query.subject_filter,
+                topic_filter=query.topic_filter,
+            )
+        else:
+            keyword_results = dense_results
+
+        if not dense_results and not keyword_results:
             return []
 
-        # 2. Compute BM25 scores across retrieved dense candidates
+        # Score lexical candidates independently of the dense-vector result set.
+        candidate_by_id = {
+            result.chunk_id: result
+            for result in [*dense_results, *keyword_results]
+        }
         docs_for_bm25 = [
-            {"id": res.chunk_id, "text": res.text_snippet} for res in dense_results
+            {"id": result.chunk_id, "text": result.text_snippet}
+            for result in candidate_by_id.values()
         ]
         bm25_scores = self.bm25_scorer.compute_scores(query.query_text, docs_for_bm25)
 
-        # 3. Perform Reciprocal Rank Fusion
         return self.reciprocal_rank_fusion(
             dense_results=dense_results,
             bm25_scores=bm25_scores,
+            keyword_results=keyword_results,
             dense_weight=query.dense_weight,
             top_k=query.top_k,
             score_threshold=query.score_threshold,
