@@ -53,6 +53,12 @@ the backend to enable semantic embeddings; without a working key, uploads and
 searches fail rather than saving misleading fallback vectors. Accounts use
 Argon2 password hashes and bearer tokens.
 
+Document questions are answered directly from retrieved passages, with source
+page citations and optional brief quotations. Retrieval combines Gemini
+semantic similarity with exact phrases, query terms, and detected section
+headings. Existing PDFs should be re-uploaded after changes to chunking or
+embedding context so their stored chunks and vectors are rebuilt.
+
 To copy existing SQLite records, first create an account in EduMate, then run
 `python -m backend.migrate_sqlite_to_postgres --email your-account@example.com`.
 The script reads `backend/edumate.db` by default and commits the relational data

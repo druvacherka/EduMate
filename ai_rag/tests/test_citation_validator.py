@@ -61,3 +61,44 @@ def test_validate_and_format_fallback_triggered():
     assert res.is_grounded is False
     assert res.fallback_triggered is True
     assert res.confidence_score == 0.0
+
+
+def test_validate_and_format_rejects_uncited_answer_with_context():
+    validator = CitationValidator()
+    context = [
+        SearchResult(
+            chunk_id="c1",
+            score=0.9,
+            document_name="Physics.pdf",
+            page_number=5,
+            text_snippet="Kinematic equations describe motion under constant acceleration.",
+        )
+    ]
+
+    result = validator.validate_and_format("Kinematic equations describe motion.", context)
+
+    assert result.is_grounded is False
+    assert result.fallback_triggered is True
+    assert result.parsed_citations == []
+
+
+def test_validate_and_format_removes_citation_not_in_retrieved_context():
+    validator = CitationValidator()
+    context = [
+        SearchResult(
+            chunk_id="c1",
+            score=0.9,
+            document_name="Physics.pdf",
+            page_number=5,
+            text_snippet="Kinematic equations describe motion under constant acceleration.",
+        )
+    ]
+
+    result = validator.validate_and_format(
+        "Motion is described here [Doc: Unknown.pdf, Page 99].",
+        context,
+    )
+
+    assert result.fallback_triggered is True
+    assert result.parsed_citations == []
+    assert "Unknown.pdf" not in result.formatted_response

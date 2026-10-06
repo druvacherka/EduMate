@@ -59,6 +59,7 @@ def test_upsert_persists_vector_as_pgvector_and_owner(monkeypatch):
         chunk_id="chunk-1",
         text="Vectors are stored in PostgreSQL.",
         page_number=1,
+        section_hierarchy=["Chapter 2", "Vector storage"],
         char_count=34,
         token_estimate=8,
     )
@@ -78,6 +79,7 @@ def test_upsert_persists_vector_as_pgvector_and_owner(monkeypatch):
     row = engine.connection.parameters[0]
     assert row["student_id"] == 42
     assert row["document_id"] == "doc-1"
+    assert row["section_title"] == "Chapter 2 > Vector storage"
     assert json.loads(row["embedding"]) == vector
 
 
@@ -100,15 +102,22 @@ def test_search_filters_by_authenticated_student(monkeypatch):
     monkeypatch.setattr(database, "engine", engine)
 
     results = PostgresVectorStore().search_similar(
-        SearchQuery(query_vector=[0.0] * 768, owner_id=42, subject_filter="Math")
+        SearchQuery(
+            query_vector=[0.0] * 768,
+            owner_id=42,
+            subject_filter="Math",
+            document_id="doc-1",
+        )
     )
 
     assert len(results) == 1
     assert results[0].score == 0.9
     assert "student_id = :owner_id" in engine.connection.statement
     assert "subject = :subject" in engine.connection.statement
+    assert "document_id = :document_id" in engine.connection.statement
     assert engine.connection.parameters["owner_id"] == 42
     assert engine.connection.parameters["subject"] == "Math"
+    assert engine.connection.parameters["document_id"] == "doc-1"
 
 
 def test_keyword_search_is_full_collection_and_owner_scoped(monkeypatch):
@@ -134,16 +143,36 @@ def test_keyword_search_is_full_collection_and_owner_scoped(monkeypatch):
         owner_id=42,
         top_k=50,
         subject_filter="Math",
+        document_id="doc-1",
     )
 
     assert len(results) == 1
     assert results[0].chunk_id == "chunk-1"
-    assert "plainto_tsquery('simple', :query_text)" in engine.connection.statement
-    assert "to_tsvector('simple', content) @@ search_terms.terms" in engine.connection.statement
+    assert "plainto_tsquery('simple', :query_text) AS all_terms" in engine.connection.statement
+    assert "phraseto_tsquery('simple', :query_text) AS phrase_terms" in engine.connection.statement
+    assert "to_tsquery('simple', :any_terms) AS any_terms" in engine.connection.statement
+    assert "strpos(lower(content), lower(:query_text)) > 0" in engine.connection.statement
+    assert "to_tsvector('simple', coalesce(section_title, ''))" in engine.connection.statement
+    assert "to_tsvector('simple', content) @@ search_terms.any_terms" in engine.connection.statement
     assert "student_id = :owner_id" in engine.connection.statement
     assert engine.connection.parameters["owner_id"] == 42
     assert engine.connection.parameters["top_k"] == 50
     assert engine.connection.parameters["subject"] == "Math"
+    assert engine.connection.parameters["document_id"] == "doc-1"
+    assert engine.connection.parameters["any_terms"] == "mathematical | vector"
+
+
+def test_keyword_search_skips_queries_without_searchable_terms(monkeypatch):
+    monkeypatch.setattr(database, "IS_POSTGRES", True)
+    monkeypatch.setattr(database, "engine", FakeEngine())
+
+    results = PostgresVectorStore().search_keyword_candidates(
+        query_text="?!",
+        owner_id=42,
+        top_k=10,
+    )
+
+    assert results == []
 
 
 def test_search_rejects_missing_owner(monkeypatch):

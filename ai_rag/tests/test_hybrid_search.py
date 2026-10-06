@@ -87,7 +87,7 @@ def test_hybrid_search_end_to_end():
 
     fake_vectors = [
         [0.1] * 768,
-        [0.9] * 768,
+        [0.9] + [0.0] * 767,
     ]
 
     store.upsert_chunks(chunks=chunks, vectors=fake_vectors, document_name="Physics.pdf", owner_id=1)
@@ -147,3 +147,69 @@ def test_keyword_search_finds_candidate_outside_dense_results():
     keyword_match = next(result for result in results if result.chunk_id == "keyword-only")
     assert keyword_match.bm25_score > 0
     assert keyword_match.dense_score == 0
+
+
+def test_hybrid_search_filters_dense_only_weak_matches():
+    store = InMemoryVectorStore()
+    engine = HybridSearchEngine(store)
+    from ai_rag.schemas.chunk_schemas import TextChunk
+
+    chunks = [
+        TextChunk(
+            chunk_id="weak-vector-match",
+            text="A passage with unrelated wording and no useful query terms.",
+            page_number=1,
+            char_count=58,
+            token_estimate=14,
+        )
+    ]
+    store.upsert_chunks(
+        chunks=chunks,
+        vectors=[[0.2, 0.98] + [0.0] * 766],
+        document_name="Textbook.pdf",
+        owner_id=3,
+    )
+
+    results = engine.search(
+        HybridSearchQuery(
+            query_text="the exact concept requested",
+            query_vector=[1.0] + [0.0] * 767,
+            top_k=5,
+            owner_id=3,
+        )
+    )
+
+    assert results == []
+
+
+def test_hybrid_search_can_scope_to_selected_document():
+    store = InMemoryVectorStore()
+    engine = HybridSearchEngine(store)
+    from ai_rag.schemas.chunk_schemas import TextChunk
+
+    for chunk_id, document_id in (("selected", "doc-1"), ("other", "doc-2")):
+        chunk = TextChunk(
+            chunk_id=chunk_id,
+            text="Newton's laws describe motion and force.",
+            page_number=1,
+            char_count=41,
+            token_estimate=10,
+        )
+        store.upsert_chunks(
+            chunks=[chunk],
+            vectors=[[1.0] * 768],
+            document_name=f"{document_id}.pdf",
+            owner_id=7,
+            document_id=document_id,
+        )
+
+    results = engine.search(
+        HybridSearchQuery(
+            query_text="Newton's laws describe motion and force",
+            query_vector=[1.0] * 768,
+            document_id="doc-1",
+            owner_id=7,
+        )
+    )
+
+    assert [result.chunk_id for result in results] == ["selected"]

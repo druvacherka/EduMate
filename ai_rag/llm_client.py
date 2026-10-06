@@ -46,6 +46,7 @@ class GeminiLLMClient:
         user_query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         use_fast_model: bool = False,
+        generation_temperature: Optional[float] = None,
     ) -> str:
         """Generate a tutor response with Gemini; never substitute simulated content."""
         if self._client is None:
@@ -74,7 +75,11 @@ class GeminiLLMClient:
                     model=model_name,
                     config=types.GenerateContentConfig(
                         system_instruction=system_prompt,
-                        temperature=settings.temperature,
+                        temperature=(
+                            settings.temperature
+                            if generation_temperature is None
+                            else generation_temperature
+                        ),
                         max_output_tokens=settings.max_output_tokens,
                     ),
                     history=chat_history,
@@ -100,6 +105,54 @@ class GeminiLLMClient:
                 )
 
         raise RuntimeError("Gemini could not generate a tutor response.")
+
+    async def generate_grounded_document_answer(
+        self,
+        system_prompt: str,
+        document_question_prompt: str,
+    ) -> str:
+        """Send retrieved source passages and the learner's question directly to Gemini."""
+        if self._client is None:
+            raise RuntimeError("Document answers require a configured GEMINI_API_KEY.")
+
+        model_names = list(dict.fromkeys(
+            (self.fast_model_name, self.default_model_name, *self.quiz_fallback_model_names)
+        ))
+        fallback_statuses = (404, 429, 500, 502, 503, 504)
+
+        for model_index, model_name in enumerate(model_names):
+            try:
+                response = self._client.models.generate_content(
+                    model=model_name,
+                    contents=document_question_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        temperature=0.1,
+                        max_output_tokens=settings.max_output_tokens,
+                    ),
+                )
+                response_text = (response.text or "").strip()
+                if not response_text:
+                    raise RuntimeError("Gemini returned an empty document answer.")
+                return response_text
+            except Exception as exc:
+                status_code = getattr(exc, "code", None) or getattr(
+                    exc, "status_code", None
+                )
+                if status_code not in fallback_statuses or model_index == len(model_names) - 1:
+                    logger.exception("Gemini document-grounded answer generation failed.")
+                    raise RuntimeError(
+                        "Gemini could not answer from the uploaded document. "
+                        "Check API access and try again."
+                    ) from exc
+                logger.warning(
+                    "Gemini document-answer model %s unavailable (HTTP %s); "
+                    "trying the next configured model.",
+                    model_name,
+                    status_code,
+                )
+
+        raise RuntimeError("Gemini could not answer from the uploaded document.")
 
     async def generate_structured_quiz(
         self,

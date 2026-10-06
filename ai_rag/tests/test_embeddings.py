@@ -145,6 +145,39 @@ def test_gemini_embedder_uses_retrieval_task_and_configured_dimensions():
     assert abs(math.sqrt(sum(value * value for value in query_vector)) - 1.0) < 1e-4
 
 
+def test_gemini_document_embeddings_include_section_hierarchy():
+    from types import SimpleNamespace
+
+    class FakeModels:
+        def __init__(self):
+            self.calls = []
+
+        def embed_content(self, **kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(
+                embeddings=[SimpleNamespace(values=[0.25] * 768)]
+            )
+
+    embedder = GeminiEmbedder(api_key="test-key")
+    models = FakeModels()
+    embedder._client = SimpleNamespace(models=models)
+    chunk = TextChunk(
+        chunk_id="chunk-section",
+        text="The source describes a precise concept.",
+        page_number=2,
+        section_title="Specific Definition",
+        section_hierarchy=["Chapter 4", "Section 4.2"],
+        char_count=40,
+        token_estimate=10,
+    )
+
+    embedder.embed_chunks([chunk])
+
+    embedded_text = models.calls[0]["contents"]
+    assert embedded_text.startswith("Section: Chapter 4 > Section 4.2 > Specific Definition")
+    assert "The source describes a precise concept." in embedded_text
+
+
 def test_gemini_embedder_does_not_silently_use_fallback_by_default():
     embedder = GeminiEmbedder(
         api_key=None,

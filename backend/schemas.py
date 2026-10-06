@@ -76,14 +76,15 @@ class RagSearchRequest(BaseModel):
     top_k: int = Field(5, ge=1, le=20, description="Max matching results")
     subject: Optional[str] = Field(None, description="Subject filter")
     topic: Optional[str] = Field(None, description="Topic filter")
+    document_id: Optional[str] = Field(None, description="Limit search to one uploaded document")
     education_level: Optional[str] = Field(None, description="Education level filter")
     goal_id: Optional[str] = Field(None, description="Goal ID filter")
 
 
 class RagSearchResponse(BaseModel):
     query: str
-    total_results: int
-    results: List[Dict[str, Any]] = Field(default_factory=list)
+    answer: str
+    citations: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class QuizSubmissionRequest(BaseModel):

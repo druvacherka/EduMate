@@ -22,7 +22,8 @@ class InMemoryVectorStore:
         document_id: Optional[str] = None,
     ) -> int:
         for chunk, vector in zip(chunks, vectors):
-            self.records.append((chunk, vector, document_name, subject, topic, owner_id))
+            resolved_document_id = document_id or document_name
+            self.records.append((chunk, vector, document_name, subject, topic, owner_id, resolved_document_id))
         return len(chunks)
 
     def search_similar(self, query: SearchQuery) -> List[SearchResult]:
@@ -30,12 +31,14 @@ class InMemoryVectorStore:
             return []
         query_norm = math.sqrt(sum(value * value for value in query.query_vector)) or 1.0
         matches = []
-        for chunk, vector, document_name, subject, topic, owner_id in self.records:
+        for chunk, vector, document_name, subject, topic, owner_id, document_id in self.records:
             if query.owner_id is not None and owner_id != query.owner_id:
                 continue
             if query.subject_filter and subject != query.subject_filter:
                 continue
             if query.topic_filter and topic != query.topic_filter:
+                continue
+            if query.document_id and document_id != query.document_id:
                 continue
             vector_norm = math.sqrt(sum(value * value for value in vector)) or 1.0
             score = sum(a * b for a, b in zip(query.query_vector, vector)) / (query_norm * vector_norm)
@@ -60,6 +63,7 @@ class InMemoryVectorStore:
         top_k: int,
         subject_filter: Optional[str] = None,
         topic_filter: Optional[str] = None,
+        document_id: Optional[str] = None,
     ) -> List[SearchResult]:
         from ai_rag.vector_store.hybrid_search import BM25Scorer
 
@@ -69,6 +73,7 @@ class InMemoryVectorStore:
             if record[5] == owner_id
             and (not subject_filter or record[3] == subject_filter)
             and (not topic_filter or record[4] == topic_filter)
+            and (not document_id or record[6] == document_id)
         ]
         documents = [
             {"id": chunk.chunk_id, "text": chunk.text}

@@ -56,7 +56,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
         query,
         level: profile.level,
         language: profile.language,
-        conversation_history: messages.map(m => ({ sender: m.sender, text: m.text }))
+        conversation_history: messages.map(m => ({ sender: m.sender, text: m.text })),
       });
 
       const aiMsg: ChatMessage = {
@@ -68,7 +68,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
         language: profile.language,
         isAudio: isVoiceActive,
         quickActions: res.quick_actions,
-        citations: res.citations?.map(c => ({ document_name: c.document_name, page_number: c.page_number }))
       };
 
       setMessages(prev => [...prev, aiMsg]);

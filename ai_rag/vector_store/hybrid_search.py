@@ -108,21 +108,25 @@ class HybridSearchEngine:
             res.chunk_id: rank + 1 for rank, res in enumerate(dense_results)
         }
 
-        sorted_bm25_ids = [
-            chunk_id
-            for chunk_id, score in sorted(
-                bm25_scores.items(), key=lambda item: item[1], reverse=True
-            )
-            if score > 0
-        ]
-        keyword_order = [
-            result.chunk_id
-            for result in (keyword_results or [])
-            if result.chunk_id not in sorted_bm25_ids
-        ]
+        keyword_scores = {
+            result.chunk_id: result.score for result in (keyword_results or [])
+        }
+        lexical_candidate_ids = {
+            chunk_id for chunk_id, score in bm25_scores.items() if score > 0
+        } | {
+            chunk_id for chunk_id, score in keyword_scores.items() if score > 0
+        }
+        sorted_bm25_ids = sorted(
+            lexical_candidate_ids,
+            key=lambda chunk_id: (
+                -bm25_scores.get(chunk_id, 0.0),
+                -keyword_scores.get(chunk_id, 0.0),
+                chunk_id,
+            ),
+        )
         bm25_ranks = {
             chunk_id: rank + 1
-            for rank, chunk_id in enumerate(sorted_bm25_ids + keyword_order)
+            for rank, chunk_id in enumerate(sorted_bm25_ids)
         }
 
         bm25_weight = 1.0 - dense_weight
@@ -185,9 +189,10 @@ class HybridSearchEngine:
         dense_query = SearchQuery(
             query_vector=query.query_vector,
             top_k=min(50, query.top_k * 3),  # Over-fetch for rank fusion candidate pool
-            score_threshold=0.0,
+            score_threshold=query.min_dense_score,
             subject_filter=query.subject_filter,
             topic_filter=query.topic_filter,
+            document_id=query.document_id,
             owner_id=query.owner_id,
         )
         dense_results = self.vector_store.search_similar(dense_query)
@@ -202,6 +207,7 @@ class HybridSearchEngine:
                 top_k=max(50, query.top_k * 10),
                 subject_filter=query.subject_filter,
                 topic_filter=query.topic_filter,
+                document_id=query.document_id,
             )
         else:
             keyword_results = dense_results

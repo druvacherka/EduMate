@@ -5,7 +5,7 @@ import {
   uploadStudyDocument,
   deleteStudyDocument,
   performRagSearch,
-  RagSearchResultItem,
+  RagSearchAnswer,
 } from '../services/api';
 import { 
   UploadCloud, 
@@ -31,7 +31,8 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
   const [ragSearchQuery, setRagSearchQuery] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<RagSearchResultItem[]>([]);
+  const [searchAnswer, setSearchAnswer] = useState<RagSearchAnswer | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load study materials from API
@@ -76,11 +77,13 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
   const handleRagSearch = async () => {
     if (!ragSearchQuery.trim()) return;
     setIsSearching(true);
+    setSearchError(null);
+    setSearchAnswer(null);
     try {
-      const results = await performRagSearch(ragSearchQuery, 4);
-      setSearchResults(results);
+      const answer = await performRagSearch(ragSearchQuery, selectedDoc?.id);
+      setSearchAnswer(answer);
     } catch (err) {
-      console.error('RAG Search failed:', err);
+      setSearchError(err instanceof Error ? err.message : 'Could not generate an answer from your study material.');
     } finally {
       setIsSearching(false);
     }
@@ -242,7 +245,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
-                RAG Hybrid Search & Vector Chunk Preview
+                Ask Your Study Material
               </h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 {selectedDoc ? selectedDoc.name : 'All Indexed Study Materials'}
@@ -257,7 +260,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
               color: '#60a5fa',
               border: '1px solid rgba(37, 99, 235, 0.25)'
             }}>
-              Dense + BM25 Hybrid Search
+              RAG • Verified Sources
             </span>
           </div>
 
@@ -270,7 +273,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
                 value={ragSearchQuery}
                 onChange={(e) => setRagSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleRagSearch()}
-                placeholder="Test semantic retrieval (e.g., 'BST deletion', 'normalization')..."
+                placeholder="Ask a question about your study material..."
                 style={{
                   width: '100%',
                   background: 'var(--bg-tertiary)',
@@ -293,30 +296,56 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
             </button>
           </div>
 
-          {/* Retrieved Vector Chunks Display */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto' }}>
-            {searchResults.length > 0 ? (
-              searchResults.map((chunk, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '14px'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--accent-emerald)', marginBottom: '6px' }}>
-                    <span>{chunk.document_name} • Page {chunk.page_number}</span>
-                    <span title={`Dense: ${chunk.dense_score}, BM25: ${chunk.bm25_score}`}>
-                      Score: {chunk.score} (RRF: {chunk.rrf_score})
-                    </span>
-                  </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    "{chunk.text_snippet}"
-                  </p>
+          {/* Single RAG-generated document answer */}
+          <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto' }}>
+            {isSearching ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                <Loader2 size={18} className="animate-spin" style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+                Searching your material and generating one grounded answer...
+              </div>
+            ) : searchError ? (
+              <div role="alert" style={{ color: 'var(--accent-rose)', padding: '16px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                {searchError}
+              </div>
+            ) : searchAnswer ? (
+              <article
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid rgba(37, 99, 235, 0.35)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '18px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#60a5fa', fontSize: '0.78rem', fontWeight: 700, marginBottom: '12px' }}>
+                  <Sparkles size={15} />
+                  <span>RAG ANSWER</span>
                 </div>
-              ))
+                <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.92rem', color: 'var(--text-primary)', lineHeight: 1.75, margin: 0 }}>
+                  {searchAnswer.answer}
+                </p>
+                {!!searchAnswer.citations.length && (
+                  <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {searchAnswer.citations.map((citation, index) => (
+                      <span
+                        key={`${citation.document_name}-${citation.page_number}-${index}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          borderRadius: 'var(--radius-full)',
+                          padding: '5px 10px',
+                          color: 'var(--accent-emerald)',
+                          background: 'rgba(16, 185, 129, 0.1)',
+                          fontSize: '0.76rem',
+                        }}
+                      >
+                        <FileText size={13} />
+                        {citation.document_name} • Page {citation.page_number}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </article>
             ) : (
               <div style={{
                 padding: '32px 16px',
@@ -328,8 +357,8 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
                 background: 'rgba(255, 255, 255, 0.01)'
               }}>
                 {ragSearchQuery.trim()
-                  ? `No chunks retrieved for "${ragSearchQuery}". Try another keyword or upload relevant course notes.`
-                  : 'Enter a search query above to test hybrid semantic retrieval across indexed PDF materials.'}
+                  ? `Ask about "${ragSearchQuery}" to get one answer grounded in your study material.`
+                  : 'Enter a question above to get one answer grounded in your study material.'}
               </div>
             )}
           </div>
@@ -349,7 +378,7 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
           }}>
             <AlertCircle size={18} style={{ flexShrink: 0 }} />
             <span>
-              <strong>Grounding Transparency:</strong> If a student query falls below 0.65 similarity, EduMate explicitly flags that the information is absent from notes.
+              <strong>Grounding Transparency:</strong> Answers are generated from retrieved passages and include verified document citations. If no relevant passage is found, EduMate will say so instead of guessing.
             </span>
           </div>
         </div>

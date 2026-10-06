@@ -124,16 +124,16 @@ export interface QuizSubmissionResponse {
   }>;
 }
 
-export interface RagSearchResultItem {
-  chunk_id: string;
+export interface RagSearchCitation {
   document_name: string;
   page_number: number;
-  text_snippet: string;
-  section_title?: string;
-  score: number;
-  dense_score: number;
-  bm25_score: number;
-  rrf_score: number;
+  raw_tag?: string;
+}
+
+export interface RagSearchAnswer {
+  query: string;
+  answer: string;
+  citations: RagSearchCitation[];
 }
 
 export async function sendSocraticChatMessage(payload: ChatRequestPayload): Promise<ChatResponseData> {
@@ -275,20 +275,48 @@ export async function updateStudentProfile(settings: Record<string, any>) {
   }
 }
 
-export async function performRagSearch(queryText: string, topK: number = 4): Promise<RagSearchResultItem[]> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/rag/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query_text: queryText, top_k: topK }),
-    });
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    const data = await res.json();
-    return data.results || [];
-  } catch (err) {
-    console.warn('Fallback RAG search:', err);
-    return [];
+export async function performRagSearch(
+  queryText: string,
+  documentId?: string
+): Promise<RagSearchAnswer> {
+  const res = await fetch(`${API_BASE_URL}/rag/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query_text: queryText,
+      top_k: 8,
+      document_id: documentId,
+    }),
+  });
+  const data: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail =
+      data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string'
+        ? data.detail
+        : `RAG search failed: ${res.statusText}`;
+    throw new Error(detail);
   }
+  if (!data || typeof data !== 'object' || !('answer' in data) || typeof data.answer !== 'string') {
+    throw new Error('The RAG service returned an outdated response. Restart the backend, then try again.');
+  }
+
+  const citations = 'citations' in data && Array.isArray(data.citations)
+    ? data.citations.filter(
+        (citation): citation is RagSearchCitation =>
+          !!citation &&
+          typeof citation === 'object' &&
+          'document_name' in citation &&
+          typeof citation.document_name === 'string' &&
+          'page_number' in citation &&
+          typeof citation.page_number === 'number'
+      )
+    : [];
+
+  return {
+    query: 'query' in data && typeof data.query === 'string' ? data.query : queryText,
+    answer: data.answer,
+    citations,
+  };
 }
 
 // ==============================================================================

@@ -135,7 +135,20 @@ class GeminiEmbedder:
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i : i + batch_size]
             for chunk in batch:
-                vec, is_fallback = self._embed_text(chunk.text, "RETRIEVAL_DOCUMENT")
+                section_context = list(dict.fromkeys(
+                    [*chunk.section_hierarchy, chunk.section_title]
+                ))
+                section_context = [
+                    title.strip()
+                    for title in section_context
+                    if title and title.strip()
+                ]
+                embedding_text = (
+                    f"Section: {' > '.join(section_context)}\n{chunk.text}"
+                    if section_context
+                    else chunk.text
+                )
+                vec, is_fallback = self._embed_text(embedding_text, "RETRIEVAL_DOCUMENT")
                 vectors.append(vec)
                 if is_fallback:
                     fallback_count += 1

@@ -157,5 +157,108 @@ def test_rag_search_endpoint(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert data["query"] == "Binary search algorithms"
-    assert "total_results" in data
-    assert isinstance(data["results"], list)
+    assert "couldn't find a relevant passage" in data["answer"]
+    assert data["citations"] == []
+
+
+def test_rag_search_returns_one_gemini_answer_grounded_in_retrieved_passages(
+    client: TestClient,
+    monkeypatch,
+):
+    from backend import main
+    from ai_rag.schemas.vector_schemas import SearchResult
+
+    captured = {}
+
+    def capture_search(query):
+        captured["search_query"] = query
+        return [
+            SearchResult(
+                chunk_id="source-1",
+                score=0.9,
+                document_name="Notes.pdf",
+                page_number=3,
+                text_snippet="The division algorithm states a = bq + r, where 0 <= r < b.",
+            ),
+            SearchResult(
+                chunk_id="source-2",
+                score=0.8,
+                document_name="Notes.pdf",
+                page_number=4,
+                text_snippet="The remainder is always less than the divisor.",
+            ),
+        ]
+
+    async def generate_answer(system_prompt, document_question_prompt):
+        captured["system_prompt"] = system_prompt
+        captured["answer_prompt"] = document_question_prompt
+        return "It states that a = bq + r with 0 <= r < b [Doc: Notes.pdf, Page 3]."
+
+    monkeypatch.setattr(main.hybrid_search_engine, "search", capture_search)
+    monkeypatch.setattr(main.llm_client, "generate_grounded_document_answer", generate_answer)
+    monkeypatch.setattr(main.gemini_embedder, "embed_query", lambda _query: [0.1] * 768)
+
+    response = client.post(
+        "/api/rag/search",
+        json={
+            "query_text": "What does the division algorithm state?",
+            "document_id": "selected-document",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["answer"].startswith("It states that a = bq + r")
+    assert len(data["citations"]) == 1
+    assert data["citations"][0]["document_name"] == "Notes.pdf"
+    assert data["citations"][0]["page_number"] == 3
+    assert "results" not in data
+    assert "What does the division algorithm state?" in captured["answer_prompt"]
+    assert "The division algorithm states a = bq + r" in captured["answer_prompt"]
+    assert captured["search_query"].document_id == "selected-document"
+    assert captured["search_query"].top_k >= 2
+
+
+def test_socratic_chat_uses_gemini_without_reading_rag_documents(client: TestClient, monkeypatch):
+    from backend import main
+
+    captured = {}
+
+    def no_document_access(*_args, **_kwargs):
+        raise AssertionError("Socratic tutor must not access RAG documents.")
+
+    async def capture_tutor_response(system_prompt, user_query, conversation_history=None, **_kwargs):
+        captured["system_prompt"] = system_prompt
+        captured["user_query"] = user_query
+        captured["history"] = conversation_history
+        return "Let's reason through this together. What do you think the first step is?"
+
+    monkeypatch.setattr(
+        main.hybrid_search_engine, "search", no_document_access
+    )
+    monkeypatch.setattr(main.gemini_embedder, "embed_query", no_document_access)
+    monkeypatch.setattr(main.llm_client, "generate_grounded_document_answer", no_document_access)
+    monkeypatch.setattr(main.llm_client, "generate_tutor_response", capture_tutor_response)
+    query = "How do I solve a quadratic equation?"
+    response = client.post(
+        "/api/chat/socratic",
+        json={
+            "query": query,
+            "level": "Intermediate",
+            "language": "English",
+            "conversation_history": [
+                {"sender": "student", "text": "I know about factoring."},
+                {"sender": "tutor", "text": "Great, let's build on that."},
+            ],
+            "document_id": "must-be-ignored",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["user_query"] == query
+    assert captured["history"][0]["text"] == "I know about factoring."
+    assert "Socratic tutor" in captured["system_prompt"]
+    assert "Do not retrieve" in captured["system_prompt"]
+    assert "INTERMEDIATE STUDENT" in captured["system_prompt"]
+    assert response.json()["response"].startswith("Let's reason through")
+    assert response.json()["citations"] is None

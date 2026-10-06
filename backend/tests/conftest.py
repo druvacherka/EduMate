@@ -39,10 +39,16 @@ def client():
         user_query,
         conversation_history=None,
         use_fast_model=False,
+        generation_temperature=None,
     ):
         return "Test tutor response based on the submitted question."
 
     patcher.setattr(llm_client, "generate_tutor_response", generate_test_tutor_response)
+
+    async def generate_test_document_answer(system_prompt, document_question_prompt):
+        return "Test document answer [Doc: Test.pdf, Page 1]."
+
+    patcher.setattr(llm_client, "generate_grounded_document_answer", generate_test_document_answer)
 
     async def generate_test_quiz(topic, num_questions, difficulty):
         return [

@@ -119,3 +119,26 @@ def test_table_detection_in_chunk():
     assert chunked_doc.total_chunks == 1
     chunk = chunked_doc.chunks[0]
     assert chunk.has_table is True
+
+
+def test_chunker_preserves_sentence_and_paragraph_separators():
+    parsed_doc = ParsedDocument(
+        metadata=PDFMetadata(file_name="separators.pdf", total_pages=1, file_size_bytes=128),
+        pages=[
+            PageContent(
+                page_number=1,
+                text=(
+                    "First sentence explains the source. Second sentence preserves its ending. "
+                    "Third sentence remains intact.\n\nA separate paragraph keeps its boundary."
+                ),
+                char_count=149,
+            )
+        ],
+        total_chars=149,
+    )
+
+    chunker = TextChunker(chunk_size=100, chunk_overlap=0)
+    chunks = chunker._recursive_split(parsed_doc.pages[0].text)
+
+    assert len(chunks) > 1
+    assert "".join(chunks) == parsed_doc.pages[0].text

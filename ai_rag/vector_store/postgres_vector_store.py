@@ -2,6 +2,7 @@
 
 import json
 import math
+import re
 from typing import List, Optional
 
 from sqlalchemy import text
@@ -44,7 +45,7 @@ class PostgresVectorStore:
                     "document_name": document_name,
                     "page_number": chunk.page_number,
                     "content": chunk.text,
-                    "section_title": chunk.section_title,
+                    "section_title": chunk.section_title or " > ".join(chunk.section_hierarchy) or None,
                     "subject": subject,
                     "topic": topic,
                     "char_count": chunk.char_count,
@@ -100,6 +101,9 @@ class PostgresVectorStore:
         if query.topic_filter:
             conditions.append("topic = :topic")
             parameters["topic"] = query.topic_filter
+        if query.document_id:
+            conditions.append("document_id = :document_id")
+            parameters["document_id"] = query.document_id
 
         statement = text(
             f"""
@@ -134,6 +138,7 @@ class PostgresVectorStore:
         top_k: int,
         subject_filter: Optional[str] = None,
         topic_filter: Optional[str] = None,
+        document_id: Optional[str] = None,
     ) -> List[SearchResult]:
         """Find lexical candidates across the owner's full document collection."""
         if not database.IS_POSTGRES or database.engine is None:
@@ -141,32 +146,53 @@ class PostgresVectorStore:
         if not query_text.strip():
             return []
 
-        conditions = [
-            "student_id = :owner_id",
-            "to_tsvector('simple', content) @@ search_terms.terms",
-        ]
+        conditions = ["student_id = :owner_id"]
+        query_terms = list(dict.fromkeys(re.findall(r"\w+", query_text.casefold(), flags=re.UNICODE)))
+        if not query_terms:
+            return []
         parameters = {
             "owner_id": owner_id,
             "query_text": query_text,
+            "any_terms": " | ".join(query_terms),
             "top_k": top_k,
         }
+        vector_match = (
+            "(to_tsvector('simple', content) @@ search_terms.any_terms "
+            "OR to_tsvector('simple', coalesce(section_title, '')) @@ search_terms.any_terms "
+            "OR strpos(lower(content), lower(:query_text)) > 0)"
+        )
         if subject_filter:
             conditions.append("subject = :subject")
             parameters["subject"] = subject_filter
         if topic_filter:
             conditions.append("topic = :topic")
             parameters["topic"] = topic_filter
+        if document_id:
+            conditions.append("document_id = :document_id")
+            parameters["document_id"] = document_id
 
         statement = text(
             f"""
             WITH search_terms AS (
-                SELECT plainto_tsquery('simple', :query_text) AS terms
+                SELECT plainto_tsquery('simple', :query_text) AS all_terms,
+                       phraseto_tsquery('simple', :query_text) AS phrase_terms,
+                       to_tsquery('simple', :any_terms) AS any_terms
             )
             SELECT chunk_id, document_name, page_number, content, section_title,
-                   ts_rank_cd(to_tsvector('simple', content), search_terms.terms) AS score
+                   (
+                       CASE WHEN strpos(lower(content), lower(:query_text)) > 0 THEN 2.0 ELSE 0.0 END
+                       + 3.0 * ts_rank_cd(to_tsvector('simple', content), search_terms.phrase_terms)
+                       + 2.0 * ts_rank_cd(to_tsvector('simple', content), search_terms.all_terms)
+                       + ts_rank_cd(to_tsvector('simple', content), search_terms.any_terms)
+                       + 2.0 * ts_rank_cd(
+                           to_tsvector('simple', coalesce(section_title, '')),
+                           search_terms.any_terms
+                       )
+                   ) AS score
             FROM study_embeddings
             CROSS JOIN search_terms
             WHERE {" AND ".join(conditions)}
+              AND {vector_match}
             ORDER BY score DESC
             LIMIT :top_k
             """

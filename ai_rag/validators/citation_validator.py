@@ -74,7 +74,7 @@ class CitationValidator:
         self,
         llm_response: str,
         context_chunks: List[SearchResult],
-        min_confidence: float = 0.5,
+        min_confidence: float = 1.0,
     ) -> GroundingAnalysisResult:
         """Validate citations against available context chunks and produce formatted output.
 
@@ -118,27 +118,32 @@ class CitationValidator:
             cit for cit in extracted if (cit.document_name.lower(), cit.page_number) in valid_sources
         ]
 
-        if extracted:
-            confidence = len(valid_citations) / len(extracted)
-        else:
-            # If no explicit citations generated, check text relevance against context
-            confidence = 0.7 if len(context_chunks) > 0 else 0.0
+        confidence = (
+            len(valid_citations) / len(extracted)
+            if extracted
+            else 0.0
+        )
 
-        is_grounded = confidence >= min_confidence
+        is_grounded = bool(valid_citations) and confidence >= min_confidence
 
         # Append structured Reference Section if citations exist
         formatted_text = llm_response.strip()
-        if extracted:
+        if valid_citations:
             references_header = "\n\n### 📖 Verified Study Material References\n"
             ref_items = [
-                f"- **{cit.document_name}** (Page {cit.page_number})" for cit in extracted
+                f"- **{cit.document_name}** (Page {cit.page_number})"
+                for cit in valid_citations
             ]
             formatted_text += references_header + "\n".join(ref_items)
+        if len(valid_citations) != len(extracted):
+            for citation in extracted:
+                if citation not in valid_citations:
+                    formatted_text = formatted_text.replace(citation.raw_tag, "")
 
         return GroundingAnalysisResult(
             is_grounded=is_grounded,
             fallback_triggered=not is_grounded,
             confidence_score=round(confidence, 2),
-            parsed_citations=extracted,
+            parsed_citations=valid_citations,
             formatted_response=formatted_text,
         )

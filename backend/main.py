@@ -150,122 +150,131 @@ async def get_authenticated_account(user: dict = Depends(get_current_user)):
 
 @app.post("/api/rag/search", response_model=RagSearchResponse)
 async def perform_rag_search(req: RagSearchRequest, student_id: int = Depends(get_current_student_id)):
-    """Execute hybrid dense vector + BM25 keyword search over study material chunks."""
+    """Retrieve supporting document passages and return one Gemini-generated answer."""
     try:
-        # Generate query embedding vector
         query_vec = gemini_embedder.embed_query(req.query_text)
-
         search_query = HybridSearchQuery(
             query_text=req.query_text,
             query_vector=query_vec,
-            top_k=req.top_k,
+            top_k=min(max(req.top_k, 8), 20),
+            document_id=req.document_id,
             subject_filter=req.subject,
             topic_filter=req.topic,
             owner_id=student_id,
         )
-
         results = hybrid_search_engine.search(search_query)
-
-        formatted_results = [
-            {
-                "chunk_id": res.chunk_id,
-                "document_name": res.document_name,
-                "page_number": res.page_number,
-                "text_snippet": res.text_snippet,
-                "section_title": res.section_title,
-                "score": res.score,
-                "dense_score": res.dense_score,
-                "bm25_score": res.bm25_score,
-                "rrf_score": res.rrf_score,
-            }
-            for res in results
+        context_chunks = [
+            SearchResult(
+                chunk_id=result.chunk_id,
+                score=result.score,
+                document_name=result.document_name,
+                page_number=result.page_number,
+                text_snippet=result.text_snippet,
+                section_title=result.section_title,
+            )
+            for result in results
         ]
+        if not context_chunks:
+            return RagSearchResponse(
+                query=req.query_text,
+                answer="I couldn't find a relevant passage in the selected study materials. Try rephrasing your question or selecting another document.",
+                citations=[],
+            )
+
+        system_prompt = grounded_prompt_builder.build_system_prompt(
+            response_language="English",
+        )
+        answer_prompt = grounded_prompt_builder.assemble_grounded_prompt(
+            user_query=req.query_text.strip(),
+            context_chunks=context_chunks,
+            document_scoped=True,
+        )
+        raw_answer = await llm_client.generate_grounded_document_answer(
+            system_prompt=system_prompt,
+            document_question_prompt=answer_prompt,
+        )
+        validation = citation_validator.validate_and_format(
+            llm_response=raw_answer,
+            context_chunks=context_chunks,
+        )
+        answer = validation.formatted_response.partition(
+            "\n\n### 📖 Verified Study Material References\n"
+        )[0]
+        if validation.fallback_triggered:
+            answer = (
+                "Gemini returned an answer without a verifiable citation to the retrieved "
+                "document passages. Please rephrase the question and try again."
+            )
 
         return RagSearchResponse(
             query=req.query_text,
-            total_results=len(formatted_results),
-            results=formatted_results,
+            answer=answer,
+            citations=[
+                {
+                    "document_name": citation.document_name,
+                    "page_number": citation.page_number,
+                    "raw_tag": citation.raw_tag,
+                }
+                for citation in validation.parsed_citations
+            ],
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Hybrid search failed: {str(e)}")
+    except Exception as exc:
+        logger.exception("Failed to generate a document-grounded RAG answer for student %s", student_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not generate a grounded answer. Check Gemini API access and try again.",
+        ) from exc
 
 @app.post("/api/chat/socratic", response_model=SocraticChatResponse)
 async def generate_socratic_chat(req: SocraticChatRequest, student_id: int = Depends(get_current_student_id)):
-    """Generate Socratic tutor response tailored by student level, language, and RAG grounding."""
+    """Generate a Gemini Socratic tutor response without retrieving study documents."""
     try:
-        context_chunks: List[SearchResult] = []
-
-        # If RAG document retrieval requested or vector store populated
-        if req.query:
-            query_vec = gemini_embedder.embed_query(req.query)
-            hybrid_q = HybridSearchQuery(
-                query_text=req.query,
-                query_vector=query_vec,
-                top_k=3,
-                score_threshold=0.3,
-                owner_id=student_id,
-            )
-            hybrid_res = hybrid_search_engine.search(hybrid_q)
-            context_chunks = [
-                SearchResult(
-                    chunk_id=r.chunk_id,
-                    score=r.score,
-                    document_name=r.document_name,
-                    page_number=r.page_number,
-                    text_snippet=r.text_snippet,
-                    section_title=r.section_title,
-                )
-                for r in hybrid_res
-            ]
-
-        # Detect query language and align pedagogical persona
+        # Detect query language and retain the learner's explicit supported language preference.
         detected_lang, _ = multilingual_detector.detect_language(req.query, fallback_language=req.language or "English")
         effective_lang = req.language if req.language in ("Hindi", "Telugu") else detected_lang
 
-        # Build grounded system prompt & user payload
-        if effective_lang in ("Hindi", "Telugu"):
-            base_prompt = multilingual_prompt_factory.get_system_prompt(effective_lang, req.level)
-            system_prompt = f"{base_prompt}\n\n{grounded_prompt_builder.build_system_prompt(user_level=req.level)}"
-            enriched_query = multilingual_prompt_factory.prepare_multilingual_query(req.query, effective_lang)
-        else:
-            system_prompt = grounded_prompt_builder.build_system_prompt(user_level=req.level)
-            enriched_query = req.query
-
-        # Dynamically inject scoped student pedagogical context (Education Level, Active Goal, Weak Areas)
-        tutor_ctx = context_builder.build_tutor_context(student_id=student_id)
-        ctx_prompt_slice = context_builder.format_tutor_context_prompt(tutor_ctx)
-        system_prompt = f"{ctx_prompt_slice}\n\n{system_prompt}"
-
-        user_payload = grounded_prompt_builder.assemble_grounded_prompt(
-            user_query=enriched_query,
-            context_chunks=context_chunks,
-            user_level=req.level,
+        tutor_ctx = context_builder.build_tutor_context(
+            student_id=student_id,
+            query_topic=req.query.strip(),
         )
-
-        # Query LLM
-        raw_response_text = await llm_client.generate_tutor_response(
+        weak_areas = [
+            area.split(" (", 1)[0]
+            for area in tutor_ctx["weak_areas"]
+            if area != "None recorded"
+        ]
+        system_prompt = prompt_factory.get_system_prompt(
+            level=req.level,
+            subject=tutor_ctx["current_subject"],
+            topic=req.query.strip(),
+            language=effective_lang,
+            weak_areas=weak_areas,
+        )
+        system_prompt = (
+            f"{system_prompt}\n\n"
+            f"{context_builder.format_tutor_context_prompt(tutor_ctx)}\n\n"
+            "You are acting as a Socratic tutor. Help the student reason step by step with "
+            "supportive hints and questions instead of immediately giving away the full solution. "
+            "Answer using your own knowledge and the conversation only. Do not retrieve, refer to, "
+            "or claim to use uploaded documents or RAG study materials."
+        )
+        user_query = req.query.strip()
+        if effective_lang in ("Hindi", "Telugu"):
+            user_query = multilingual_prompt_factory.prepare_multilingual_query(
+                user_query,
+                effective_lang,
+            )
+        response_text = await llm_client.generate_tutor_response(
             system_prompt=system_prompt,
-            user_query=user_payload,
+            user_query=user_query,
             conversation_history=req.conversation_history,
         )
 
-        # Validate grounding & extract citations
-        validation_res = citation_validator.validate_and_format(
-            llm_response=raw_response_text,
-            context_chunks=context_chunks,
-        )
-
-        citations_dict = [
-            {"document_name": c.document_name, "page_number": c.page_number, "raw_tag": c.raw_tag}
-            for c in validation_res.parsed_citations
-        ]
-
         return SocraticChatResponse(
-            response=validation_res.formatted_response,
+            response=response_text,
             level=req.level,
             language=effective_lang,
             quick_actions=[],
-            citations=citations_dict if citations_dict else None,
+            citations=None,
         )
     except Exception as e:
         logger.exception("Failed to generate Socratic tutor response for student %s", student_id)

@@ -12,10 +12,19 @@ def test_grounded_system_prompt_builder():
     sys_prompt = builder.build_system_prompt(user_level="Beginner")
 
     assert "EduMate" in sys_prompt
-    assert "When Study Material Context is provided" in sys_prompt
-    assert "general knowledge" in sys_prompt
+    assert "Treat retrieved study material as the source of truth" in sys_prompt
+    assert "general-knowledge answer" in sys_prompt
+    assert "quote the exact relevant sentence or phrase verbatim" in sys_prompt
     assert "[Doc: <document_name>, Page <page_number>]" in sys_prompt
     assert "Target Learning Level: Beginner" in sys_prompt
+
+
+@pytest.mark.parametrize("language", ["Hindi", "Telugu"])
+def test_grounded_system_prompt_keeps_requested_language_without_socratic_override(language):
+    prompt = GroundedPromptBuilder().build_system_prompt(response_language=language)
+
+    assert f"Answer in {language}" in prompt
+    assert "Do not turn a direct question into an unrelated Socratic dialogue" in prompt
 
 
 def test_build_context_block_with_chunks():
@@ -72,4 +81,15 @@ def test_assemble_grounded_prompt():
 
     assert "Document: Algorithms.pdf | Page: 42" in prompt
     assert "How does Dijkstra's algorithm work?" in prompt
-    assert "Provide a grounded, step-by-step Socratic answer with inline citations" in prompt
+    assert "Answer directly from the supplied passages" in prompt
+
+
+def test_selected_document_without_retrieved_evidence_forbids_general_answer():
+    prompt = GroundedPromptBuilder().assemble_grounded_prompt(
+        user_query="What is the conclusion?",
+        context_chunks=[],
+        document_scoped=True,
+    )
+
+    assert "not found in that document" in prompt
+    assert "Do not answer from general knowledge" in prompt

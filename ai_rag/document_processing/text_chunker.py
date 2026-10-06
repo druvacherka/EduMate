@@ -175,16 +175,21 @@ class TextChunker:
         parts = text.split(separator)
 
         segments: list[str] = []
-        for part in parts:
-            stripped = part.strip()
-            if not stripped:
+        for index, part in enumerate(parts):
+            has_separator = index < len(parts) - 1
+            content = part.strip()
+            if not content:
+                if has_separator and segments:
+                    segments[-1] += separator
                 continue
 
-            if len(stripped) <= self.config.chunk_size:
-                segments.append(stripped)
+            if len(content) <= self.config.chunk_size:
+                segments.append(f"{part}{separator}" if has_separator else part)
             else:
                 # Recursively split with next finer separator
-                sub_segments = self._recursive_split(stripped, separator_index + 1)
+                sub_segments = self._recursive_split(content, separator_index + 1)
+                if has_separator and sub_segments:
+                    sub_segments[-1] += separator
                 segments.extend(sub_segments)
 
         return segments
@@ -242,7 +247,7 @@ class TextChunker:
 
             # If adding this segment would exceed chunk_size, finalize current chunk
             if current_parts and (current_len + seg_len + 1) > self.config.chunk_size:
-                chunk_text = " ".join(current_parts)
+                chunk_text = "".join(current_parts).strip()
                 section = self._detect_section_title(chunk_text)
                 chunk_idx = start_index + len(chunks)
                 has_tbl = "[Extracted Tables]" in chunk_text or "| --- |" in chunk_text
@@ -263,16 +268,14 @@ class TextChunker:
                 # Start new chunk with overlap from tail of previous
                 overlap_parts = self._get_overlap_parts(current_parts)
                 current_parts = overlap_parts
-                current_len = sum(len(p) for p in current_parts) + max(
-                    0, len(current_parts) - 1
-                )
+                current_len = sum(len(p) for p in current_parts)
 
             current_parts.append(segment)
-            current_len += seg_len + (1 if len(current_parts) > 1 else 0)
+            current_len += seg_len
 
         # Finalize the last chunk
         if current_parts:
-            chunk_text = " ".join(current_parts)
+            chunk_text = "".join(current_parts).strip()
             section = self._detect_section_title(chunk_text)
             chunk_idx = start_index + len(chunks)
             has_tbl = "[Extracted Tables]" in chunk_text or "| --- |" in chunk_text
