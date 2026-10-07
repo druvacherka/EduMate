@@ -15,6 +15,37 @@ from ai_rag.schemas.vector_schemas import SearchQuery, SearchResult
 class PostgresVectorStore:
     """Persists embeddings in PostgreSQL and runs account-scoped cosine search."""
 
+    def get_document_chunks(self, document_id: str, owner_id: int) -> List[SearchResult]:
+        """Return every indexed chunk for one document owned by the student."""
+        if not database.IS_POSTGRES or database.engine is None:
+            raise RuntimeError("RAG vector storage requires a configured PostgreSQL database.")
+
+        statement = text(
+            """
+            SELECT chunk_id, document_name, page_number, content, section_title
+            FROM study_embeddings
+            WHERE student_id = :owner_id AND document_id = :document_id
+            ORDER BY page_number, chunk_id
+            """
+        )
+        with database.engine.connect() as connection:
+            rows = connection.execute(
+                statement,
+                {"owner_id": owner_id, "document_id": document_id},
+            ).mappings().all()
+
+        return [
+            SearchResult(
+                chunk_id=row["chunk_id"],
+                score=1.0,
+                document_name=row["document_name"],
+                page_number=row["page_number"],
+                text_snippet=row["content"],
+                section_title=row["section_title"],
+            )
+            for row in rows
+        ]
+
     def upsert_chunks(
         self,
         chunks: List[TextChunk],

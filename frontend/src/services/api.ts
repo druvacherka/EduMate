@@ -84,6 +84,7 @@ export interface QuizRequestPayload {
   topic: string;
   num_questions?: number;
   difficulty?: string;
+  document_id?: string;
 }
 
 export interface QuizQuestionData {

@@ -120,6 +120,33 @@ def test_search_filters_by_authenticated_student(monkeypatch):
     assert engine.connection.parameters["document_id"] == "doc-1"
 
 
+def test_document_chunk_retrieval_is_scoped_to_owner_and_document(monkeypatch):
+    engine = FakeEngine(
+        FakeResult(
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "document_name": "biology.pdf",
+                    "page_number": 2,
+                    "content": "Mitochondria produce ATP.",
+                    "section_title": "Cell respiration",
+                }
+            ]
+        )
+    )
+    monkeypatch.setattr(database, "IS_POSTGRES", True)
+    monkeypatch.setattr(database, "engine", engine)
+
+    chunks = PostgresVectorStore().get_document_chunks("doc-1", owner_id=42)
+
+    assert len(chunks) == 1
+    assert chunks[0].text_snippet == "Mitochondria produce ATP."
+    assert chunks[0].page_number == 2
+    assert "student_id = :owner_id" in engine.connection.statement
+    assert "document_id = :document_id" in engine.connection.statement
+    assert engine.connection.parameters == {"owner_id": 42, "document_id": "doc-1"}
+
+
 def test_keyword_search_is_full_collection_and_owner_scoped(monkeypatch):
     engine = FakeEngine(
         FakeResult(

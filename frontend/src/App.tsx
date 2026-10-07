@@ -25,6 +25,7 @@ export function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(Boolean(getAuthToken()));
+  const [documentQuizRequest, setDocumentQuizRequest] = useState<{ id: string; name: string } | null>(null);
 
   const [profile, setProfile] = useState<StudentProfile>({
     name: '',
@@ -83,12 +84,17 @@ export function App() {
   };
 
   const handleNavigateToTab = (tab: ActiveTab, topicContext?: string) => {
+    handleSetActiveTab(tab);
     if (topicContext) {
       setProfile((prev) => ({
         ...prev,
         currentTopic: topicContext,
       }));
     }
+  };
+
+  const handleSetActiveTab = (tab: ActiveTab) => {
+    if (tab !== 'quizzes') setDocumentQuizRequest(null);
     setActiveTab(tab);
   };
 
@@ -98,7 +104,7 @@ export function App() {
       currentSubject: subject,
       currentTopic: topic,
     }));
-    setActiveTab('tutor');
+    handleSetActiveTab('tutor');
   };
 
   const handleSelectTopicForQuiz = (topic: string) => {
@@ -106,6 +112,11 @@ export function App() {
       ...prev,
       currentTopic: topic,
     }));
+    handleSetActiveTab('quizzes');
+  };
+
+  const handleGenerateDocumentQuiz = (document: { id: string; name: string }) => {
+    setDocumentQuizRequest({ id: document.id, name: document.name });
     setActiveTab('quizzes');
   };
 
@@ -118,7 +129,7 @@ export function App() {
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleSetActiveTab}
         profile={profile}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={toggleSidebar}
@@ -156,11 +167,17 @@ export function App() {
           )}
 
           {activeTab === 'materials' && (
-            <StudyMaterialView profile={profile} />
+            <StudyMaterialView
+              profile={profile}
+              onGenerateDocumentQuiz={handleGenerateDocumentQuiz}
+            />
           )}
 
           {activeTab === 'quizzes' && (
-            <QuizView profile={profile} />
+            <QuizView
+              profile={profile}
+              documentQuizRequest={documentQuizRequest}
+            />
           )}
 
           {activeTab === 'planner' && (

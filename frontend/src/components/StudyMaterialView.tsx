@@ -18,14 +18,16 @@ import {
   Search,
   Sparkles,
   AlertCircle,
-  Loader2
+  Loader2,
+  ClipboardList,
 } from 'lucide-react';
 
 interface StudyMaterialViewProps {
   profile: StudentProfile;
+  onGenerateDocumentQuiz: (document: StudyDocument) => void;
 }
 
-export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile }) => {
+export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile, onGenerateDocumentQuiz }) => {
   const [documents, setDocuments] = useState<StudyDocument[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<StudyDocument | null>(null);
   const [ragSearchQuery, setRagSearchQuery] = useState('');
@@ -295,6 +297,16 @@ export const StudyMaterialView: React.FC<StudyMaterialViewProps> = ({ profile })
               {isSearching ? 'Searching...' : 'Search'}
             </button>
           </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => selectedDoc && onGenerateDocumentQuiz(selectedDoc)}
+            disabled={!selectedDoc || selectedDoc.status !== 'Ready'}
+            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            <ClipboardList size={16} />
+            Generate Quiz
+          </button>
 
           {/* Single RAG-generated document answer */}
           <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto' }}>

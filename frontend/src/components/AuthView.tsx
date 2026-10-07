@@ -27,47 +27,97 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated }) => {
   };
 
   return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg-primary)', padding: 24 }}>
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: 420, padding: 32, borderRadius: 16, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-        <h1 style={{ color: 'var(--text-primary)', margin: '0 0 8px' }}>EduMate</h1>
-        <p style={{ color: 'var(--text-secondary)', margin: '0 0 24px' }}>
-          {mode === 'login' ? 'Sign in to your learning account.' : 'Create an account to get started.'}
-        </p>
-        <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 14 }}>
-          Email
-          <input
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            style={{ boxSizing: 'border-box', display: 'block', width: '100%', marginTop: 6, padding: 10 }}
-          />
-        </label>
-        <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 16 }}>
-          Password {mode === 'register' && '(at least 12 characters)'}
-          <input
-            type="password"
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            minLength={mode === 'register' ? 12 : undefined}
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            style={{ boxSizing: 'border-box', display: 'block', width: '100%', marginTop: 6, padding: 10 }}
-          />
-        </label>
-        {error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
-        <button className="btn-primary" type="submit" disabled={submitting} style={{ width: '100%', padding: 11 }}>
-          {submitting ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
-        </button>
-        <button
-          type="button"
-          onClick={() => { setError(''); setMode(mode === 'login' ? 'register' : 'login'); }}
-          style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 0, color: 'var(--text-secondary)', cursor: 'pointer' }}
-        >
-          {mode === 'login' ? 'Need an account? Create one' : 'Already registered? Sign in'}
-        </button>
-      </form>
+    <main className="auth-page">
+      <div className="auth-shell">
+        <aside className="auth-hero">
+          <div className="brand-row">
+            <div className="brand-mark" aria-label="EduMate logo">
+              <img src="/favicon.svg" alt="EduMate logo" />
+            </div>
+            <div>
+              <span className="eyebrow">AI Learning Companion</span>
+              <h1>EduMate</h1>
+            </div>
+          </div>
+
+          <p className="hero-copy">
+            Turn study time into steady progress with adaptive guidance, practice, and revision built around how you learn.
+          </p>
+
+          <ul className="feature-list">
+            <li>Personalised study plans</li>
+            <li>Smarter revision loops</li>
+            <li>Practice quizzes and topic insights</li>
+          </ul>
+        </aside>
+
+        <section className="auth-card">
+          <div className="auth-header">
+            <div className="brand-row brand-row-small">
+              <div className="brand-mark brand-mark-small" aria-label="EduMate logo">
+                <img src="/favicon.svg" alt="EduMate logo" />
+              </div>
+              <div>
+                <span className="eyebrow">Welcome</span>
+                <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
+              </div>
+            </div>
+            <p>
+              {mode === 'login'
+                ? 'Sign in to continue your learning journey.'
+                : 'Start your personalised learning journey with EduMate.'}
+            </p>
+          </div>
+
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <label className="auth-field">
+              <span>Email address</span>
+              <input
+                className="auth-input"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+
+            <label className="auth-field">
+              <span>Password {mode === 'register' && '(12+ characters)'}</span>
+              <input
+                className="auth-input"
+                type="password"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                minLength={mode === 'register' ? 12 : undefined}
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+
+            {error && (
+              <div className="auth-error" role="alert">
+                {error}
+              </div>
+            )}
+
+            <button className="btn btn-primary auth-submit" type="submit" disabled={submitting}>
+              {submitting ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
+            </button>
+          </form>
+
+          <button
+            type="button"
+            className="auth-toggle"
+            onClick={() => {
+              setError('');
+              setMode(mode === 'login' ? 'register' : 'login');
+            }}
+          >
+            {mode === 'login' ? 'Need an account? Create one' : 'Already registered? Sign in'}
+          </button>
+        </section>
+      </div>
     </main>
   );
 };

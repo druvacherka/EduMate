@@ -103,9 +103,7 @@ class PlannerEngine:
             weak_rows = cursor.fetchall()
             priority_weaks = [r["topic"] for r in weak_rows]
 
-        rec = None
-        if priority_weaks or active_goals or profile.get("current_topic"):
-            rec = recommendation_engine.get_next_recommendation(student_id=student_id)
+        rec = recommendation_engine.get_next_recommendation(student_id=student_id)
 
         return DailyDashboardResponse(
             greeting=greeting,
