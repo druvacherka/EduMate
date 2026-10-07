@@ -329,34 +329,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab, o
             <div>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#f8fafc', margin: 0 }}>Today's Learning Tasks</h3>
               <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '4px 0 0 0' }}>
-                Est. time remaining: <strong>{dashboard.estimated_time_remaining_minutes} min</strong>
+                {dashboard.total_tasks_count > 0 ? (
+                  <>Est. time remaining: <strong>{dashboard.estimated_time_remaining_minutes} min</strong></>
+                ) : (
+                  'No study tasks scheduled for today.'
+                )}
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div
-                style={{
-                  width: 120,
-                  height: 8,
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  borderRadius: 4,
-                  overflow: 'hidden',
-                }}
-              >
+            {dashboard.total_tasks_count > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div
                   style={{
-                    width: `${completionPct}%`,
-                    height: '100%',
-                    background: 'linear-gradient(90deg, #38bdf8, #10b981)',
-                    transition: 'width 0.4s ease',
+                    width: 120,
+                    height: 8,
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: 4,
+                    overflow: 'hidden',
                   }}
-                />
+                >
+                  <div
+                    style={{
+                      width: `${completionPct}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #38bdf8, #10b981)',
+                      transition: 'width 0.4s ease',
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#10b981' }}>{completionPct}%</span>
               </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#10b981' }}>{completionPct}%</span>
-            </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {dashboard.today_tasks.map((task) => {
+            {dashboard.today_tasks.length === 0 ? (
+              <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
+                Your scheduled tasks will appear here once you have a study plan.
+              </p>
+            ) : dashboard.today_tasks.map((task) => {
               const isBusy = togglingTaskId === task.id;
               return (
                 <div
@@ -556,7 +566,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab, o
                   </div>
                 ))
               ) : (
-                <div style={{ color: '#10b981', fontSize: '0.85rem' }}>No critical weak areas recorded. Great progress!</div>
+                <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No quiz-based weak areas recorded yet.</div>
               )}
             </div>
 

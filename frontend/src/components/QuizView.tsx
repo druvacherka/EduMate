@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StudentProfile } from '../types';
 import { 
   generateQuizQuestions, 
@@ -22,10 +22,15 @@ import {
 
 interface QuizViewProps {
   profile: StudentProfile;
+  documentQuizRequest: { id: string; name: string } | null;
 }
 
-export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
-  const [topic, setTopic] = useState(profile.currentTopic || '');
+export const QuizView: React.FC<QuizViewProps> = ({
+  profile,
+  documentQuizRequest,
+}) => {
+  const [topic, setTopic] = useState(documentQuizRequest?.name || profile.currentTopic || '');
+  const [documentSource, setDocumentSource] = useState<{ id: string; name: string } | null>(documentQuizRequest);
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
   const [isGenerating, setIsGenerating] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
@@ -38,20 +43,29 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
   const [submissionResult, setSubmissionResult] = useState<QuizSubmissionResponse | null>(null);
 
   const currentQ = questions[currentIndex] || null;
+  const isQuizGenerating = isGenerating || Boolean(documentQuizRequest && questions.length === 0 && !error);
 
-  const handleGenerateQuiz = async () => {
-    if (!topic.trim()) {
+  const generateQuiz = useCallback(async (
+    requestedTopic = topic,
+    sourceDocument: { id: string; name: string } | null = documentSource,
+  ) => {
+    if (!requestedTopic.trim()) {
       setError('Please specify a topic to generate a quiz.');
       return;
     }
 
     setIsGenerating(true);
     setError(null);
+    setQuestions([]);
+    setSubmissionResult(null);
+    setTopic(requestedTopic);
+    setDocumentSource(sourceDocument);
     try {
       const data = await generateQuizQuestions({
-        topic: topic.trim(),
+        topic: requestedTopic.trim(),
         difficulty,
-        num_questions: 3,
+        num_questions: 7,
+        document_id: sourceDocument?.id,
       });
       setSessionId(data.session_id);
       setQuestions(data.questions || []);
@@ -64,6 +78,35 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
     } finally {
       setIsGenerating(false);
     }
+  }, [difficulty, documentSource, topic]);
+
+  useEffect(() => {
+    if (!documentQuizRequest) return;
+    let cancelled = false;
+    generateQuizQuestions({
+      topic: documentQuizRequest.name.trim(),
+      difficulty,
+      num_questions: 7,
+      document_id: documentQuizRequest.id,
+    }).then((data) => {
+      if (cancelled) return;
+      setSessionId(data.session_id);
+      setQuestions(data.questions || []);
+      setCurrentIndex(0);
+      setSelectedAnswers({});
+      setSubmissionResult(null);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      console.error('Document quiz generation failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate a quiz from this study material.');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [documentQuizRequest, difficulty]);
+
+  const handleGenerateQuiz = () => {
+    void generateQuiz(topic, documentSource);
   };
 
   const handleOptionSelect = (optionIdx: number) => {
@@ -165,14 +208,19 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
 
         <button
           onClick={handleGenerateQuiz}
-          disabled={isGenerating}
+          disabled={isQuizGenerating}
           className="btn btn-primary"
           style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--accent-primary)' }}
         >
-          {isGenerating ? <Loader2 size={15} className="spin-slow" /> : <Sparkles size={15} />}
-          <span>{isGenerating ? 'Generating Quiz...' : 'Generate AI Quiz'}</span>
+          {isQuizGenerating ? <Loader2 size={15} className="spin-slow" /> : <Sparkles size={15} />}
+          <span>{isQuizGenerating ? 'Generating Quiz...' : 'Generate AI Quiz'}</span>
         </button>
       </div>
+      {documentSource && (
+        <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+          Questions will be generated from <strong style={{ color: 'var(--text-primary)' }}>{documentSource.name}</strong>.
+        </div>
+      )}
 
       {/* Error Alert Banner */}
       {error && (
@@ -223,7 +271,8 @@ export const QuizView: React.FC<QuizViewProps> = ({ profile }) => {
             No Active Quiz Session
           </h3>
           <p style={{ maxWidth: '440px', fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Enter a topic and choose a difficulty above. Quiz questions are generated for your selection.
+            Enter a topic and choose a difficulty above. Seven questions will be generated for your selection
+            {documentSource ? ` from ${documentSource.name}` : ''}.
           </p>
         </div>
       ) : !submissionResult && currentQ ? (

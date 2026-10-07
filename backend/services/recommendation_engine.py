@@ -5,14 +5,12 @@ active goals, pending spaced revisions, and identified weak concepts.
 """
 
 from typing import Any, Dict, List, Optional
-from datetime import date
 
 from backend.database import (
     get_student_profile,
     list_revision_items,
     get_db_connection,
 )
-from backend.services.goals_engine import goals_engine
 
 
 class RecommendationEngine:
@@ -24,10 +22,8 @@ class RecommendationEngine:
         Priority order:
         1. High-frequency weak areas with mistake_count >= 2 (Urgent Revision).
         2. Spaced repetition topics currently due.
-        3. Active goal milestone practice / new concept learning.
         """
         profile = get_student_profile(student_id)
-        goals = [g for g in goals_engine.get_goals(student_id=student_id) if g.is_active]
 
         # 1. Check for prominent weak areas
         with get_db_connection() as conn:
@@ -43,7 +39,7 @@ class RecommendationEngine:
         if weak_row and weak_row["mistake_count"] >= 2:
             return {
                 "recommended_action": "REVIEW_MISTAKES",
-                "subject": weak_row["subject"] or profile.get("current_subject") or "Core Subject",
+                "subject": weak_row["subject"] or profile.get("current_subject") or "",
                 "topic": weak_row["topic"],
                 "reason": f"High mistake frequency ({weak_row['mistake_count']} errors recorded). Requires targeted reinforcement.",
                 "estimated_minutes": 25,
@@ -65,45 +61,7 @@ class RecommendationEngine:
                 "learning_level": profile.get("level", "Beginner"),
             }
 
-        # 3. Next learning action from active goal or current topic
-        primary_goal = goals[0] if goals else None
-        current_subject = profile.get("current_subject") or (primary_goal.name if primary_goal else "")
-        current_topic = profile.get("current_topic") or ""
-        if not current_subject and not current_topic:
-            return None
-
-        mastery = profile.get("mastery_score", 0.0)
-
-        if mastery < 50.0:
-            return {
-                "recommended_action": "LEARN",
-                "subject": current_subject,
-                "topic": current_topic,
-                "reason": f"Baseline mastery is {round(mastery, 1)}%. Socratic foundational study recommended.",
-                "estimated_minutes": 30,
-                "priority": "MEDIUM",
-                "learning_level": "Beginner",
-            }
-        elif mastery < 80.0:
-            return {
-                "recommended_action": "PRACTICE",
-                "subject": current_subject,
-                "topic": current_topic,
-                "reason": f"Moderate mastery ({round(mastery, 1)}%). Solve targeted assessment questions to solidify understanding.",
-                "estimated_minutes": 30,
-                "priority": "MEDIUM",
-                "learning_level": "Intermediate",
-            }
-        else:
-            return {
-                "recommended_action": "TAKE_QUIZ",
-                "subject": current_subject,
-                "topic": current_topic,
-                "reason": f"High mastery ({round(mastery, 1)}%). Challenge with adaptive difficulty quiz questions.",
-                "estimated_minutes": 20,
-                "priority": "NORMAL",
-                "learning_level": "Advanced",
-            }
+        return None
 
 
 recommendation_engine = RecommendationEngine()

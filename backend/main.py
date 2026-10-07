@@ -417,13 +417,49 @@ async def remove_study_material(doc_id: str, student_id: int = Depends(get_curre
 async def generate_quiz(req: QuizGenerationRequest, student_id: int = Depends(get_current_student_id)):
     """Generate structured AI quiz questions and initialize a state machine session."""
     try:
+        source_context = None
+        if req.document_id:
+            material = next(
+                (
+                    item
+                    for item in list_study_materials(student_id)
+                    if item["id"] == req.document_id
+                ),
+                None,
+            )
+            if material is None:
+                raise HTTPException(status_code=404, detail="Study material was not found.")
+            if material["status"] != "Ready":
+                raise HTTPException(status_code=422, detail="Study material is not ready for quiz generation.")
+
+            document_chunks = postgres_vector_store.get_document_chunks(
+                req.document_id,
+                owner_id=student_id,
+            )
+            if not document_chunks:
+                raise HTTPException(
+                    status_code=422,
+                    detail="No indexed text was found for this study material.",
+                )
+            source_context = "\n\n".join(
+                (
+                    f"[Page {chunk.page_number}] "
+                    f"{chunk.section_title + ': ' if chunk.section_title else ''}"
+                    f"{chunk.text_snippet}"
+                )
+                for chunk in document_chunks
+            )
+
         session = await quiz_state_machine.create_session(
             topic=req.topic.strip(),
             student_id=student_id,
             difficulty=req.difficulty,
             num_questions=req.num_questions,
+            source_context=source_context,
         )
         return session
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to generate quiz for student %s", student_id)
         raise HTTPException(

@@ -167,8 +167,9 @@ class GeminiLLMClient:
     async def generate_structured_quiz(
         self,
         topic: str,
-        num_questions: int = 3,
+        num_questions: int = 7,
         difficulty: str = "Medium",
+        source_context: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Generate and validate a quiz using Gemini; never substitute hardcoded questions."""
         if self._client is None:
@@ -187,6 +188,14 @@ class GeminiLLMClient:
             "answer. Explanations must justify the correct answer. Questions must genuinely "
             "test the requested topic and difficulty."
         )
+        if source_context:
+            prompt += (
+                "\n\nUse only the following study-document content as the source of facts "
+                "for every question, answer, and explanation. Do not introduce knowledge "
+                "that is not supported by this content. Paraphrase rather than testing "
+                "irrelevant details.\n\n"
+                f"STUDY DOCUMENT CONTENT:\n{source_context}"
+            )
         try:
             response = None
             model_names = list(dict.fromkeys(

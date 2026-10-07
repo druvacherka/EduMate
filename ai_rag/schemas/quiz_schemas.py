@@ -34,7 +34,7 @@ class QuizGenerationConfig(BaseModel):
     """Parameters for adaptive quiz generation."""
 
     topic: str = Field(..., description="Target technical topic")
-    num_questions: int = Field(3, ge=1, le=10, description="Number of questions")
+    num_questions: int = Field(7, ge=1, le=10, description="Number of questions")
     difficulty: DifficultyLevel = Field("Medium", description="Target difficulty")
     mastery_score: Optional[float] = Field(None, ge=0.0, le=100.0, description="Current student mastery percentage")
     allowed_types: List[QuestionType] = Field(

@@ -32,7 +32,8 @@ class QuizStateMachine:
         topic: str,
         student_id: int,
         difficulty: str = "Medium",
-        num_questions: int = 3,
+        num_questions: int = 7,
+        source_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate questions and initialize a new quiz session in CREATED state.
 
@@ -47,11 +48,14 @@ class QuizStateMachine:
         session_id = f"quiz-{uuid.uuid4().hex[:8]}"
 
         # Generate questions using LLM client
-        questions = await llm_client.generate_structured_quiz(
-            topic=topic,
-            num_questions=num_questions,
-            difficulty=difficulty,
-        )
+        generation_inputs = {
+            "topic": topic,
+            "num_questions": num_questions,
+            "difficulty": difficulty,
+        }
+        if source_context:
+            generation_inputs["source_context"] = source_context
+        questions = await llm_client.generate_structured_quiz(**generation_inputs)
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -129,19 +133,20 @@ class QuizStateMachine:
                 # Evaluate answer based on question type
                 is_correct = False
                 explanation = q.get("explanation", "")
+                normalized_user_answer = str(user_ans).strip().casefold() if user_ans is not None else ""
+                normalized_correct_answer = str(correct_ans).strip().casefold() if correct_ans is not None else ""
+                answers_match = bool(normalized_correct_answer) and normalized_user_answer == normalized_correct_answer
 
-                if q.get("type") == "short":
+                if answers_match:
+                    is_correct = True
+                elif q.get("type") == "short":
                     eval_res = adaptive_difficulty_scaler.evaluate_short_answer_heuristic(
-                        student_answer=str(user_ans or ""),
-                        reference_answer=str(correct_ans or ""),
+                        student_answer=str(user_ans) if user_ans is not None else "",
+                        reference_answer=str(correct_ans) if correct_ans is not None else "",
                         rubric_keywords=q.get("rubric_keywords") or [str(correct_ans)],
                     )
                     is_correct = eval_res["is_correct"]
                     explanation = f"{eval_res['feedback']} {explanation}"
-                else:
-                    if user_ans is not None:
-                        if str(user_ans).strip().lower() == str(correct_ans).strip().lower():
-                            is_correct = True
 
                 if is_correct:
                     score += 1

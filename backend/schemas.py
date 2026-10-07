@@ -49,8 +49,9 @@ class SocraticChatResponse(BaseModel):
 
 class QuizGenerationRequest(BaseModel):
     topic: str = Field(..., min_length=1, max_length=200)
-    num_questions: int = Field(3, ge=1, le=10)
+    num_questions: int = Field(7, ge=1, le=10)
     difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"
+    document_id: Optional[str] = Field(None, description="Generate questions from this indexed study document")
 
     @field_validator("topic")
     @classmethod

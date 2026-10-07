@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from ai_rag.llm_client import llm_client
+
 from backend.database import get_db_connection
 
 
@@ -57,6 +59,67 @@ def test_quiz_generation_endpoint(client: TestClient):
     assert all("rubric_keywords" not in question for question in data["questions"])
 
 
+def test_document_quiz_generation_uses_owned_document_chunks(client: TestClient, monkeypatch):
+    from backend import main
+    from ai_rag.schemas.vector_schemas import SearchResult
+
+    captured = {}
+
+    async def generate_document_quiz(topic, num_questions, difficulty, source_context):
+        captured.update(
+            topic=topic,
+            num_questions=num_questions,
+            source_context=source_context,
+        )
+        return [
+            {
+                "id": f"q{index + 1}",
+                "type": "mcq",
+                "question": f"Document question {index + 1}?",
+                "options": ["A", "B", "C", "D"],
+                "correctAnswer": 0,
+                "explanation": "The document supports this answer clearly.",
+                "difficulty": difficulty,
+                "topic": topic,
+            }
+            for index in range(num_questions)
+        ]
+
+    monkeypatch.setattr(
+        main,
+        "list_study_materials",
+        lambda _student_id: [
+            {"id": "owned-document", "name": "Biology Notes.pdf", "status": "Ready"}
+        ],
+    )
+    monkeypatch.setattr(
+        main.postgres_vector_store,
+        "get_document_chunks",
+        lambda document_id, owner_id: [
+            SearchResult(
+                chunk_id="biology-1",
+                score=1.0,
+                document_name="Biology Notes.pdf",
+                page_number=2,
+                text_snippet="Mitochondria produce ATP through cellular respiration.",
+            )
+        ],
+    )
+    monkeypatch.setattr(llm_client, "generate_structured_quiz", generate_document_quiz)
+
+    response = client.post(
+        "/api/quizzes/generate",
+        json={"topic": "Biology Notes.pdf", "document_id": "owned-document"},
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert len(data["questions"]) == 7
+    assert captured["num_questions"] == 7
+    assert "[Page 2]" in captured["source_context"]
+    assert "Mitochondria produce ATP" in captured["source_context"]
+
+
 def test_quiz_submit_endpoint(client: TestClient):
     # 1. Create a session
     gen_payload = {
@@ -83,6 +146,41 @@ def test_quiz_submit_endpoint(client: TestClient):
     assert result["status"] == "EVALUATED"
     assert result["score"] == len(questions)
     assert result["percentage"] == 100.0
+
+
+def test_short_quiz_accepts_exact_reference_answer(client: TestClient, monkeypatch):
+    async def generate_short_quiz(topic, num_questions, difficulty):
+        return [
+            {
+                "id": "short-1",
+                "type": "short",
+                "question": "What is the next number in the sequence: 3, 6, 12, 24, __?",
+                "correctAnswer": "48",
+                "rubric_keywords": ["multiplied by 2", "double"],
+                "explanation": "Each term is multiplied by 2.",
+                "difficulty": difficulty,
+                "topic": topic,
+            }
+        ]
+
+    monkeypatch.setattr(llm_client, "generate_structured_quiz", generate_short_quiz)
+    quiz_response = client.post(
+        "/api/quizzes/generate",
+        json={"topic": "Aptitude questions", "num_questions": 1, "difficulty": "Medium"},
+    )
+    assert quiz_response.status_code == 200
+    quiz = quiz_response.json()
+
+    response = client.post(
+        "/api/quizzes/submit",
+        json={"session_id": quiz["session_id"], "user_answers": {"short-1": "48"}},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["score"] == 1
+    assert result["results"][0]["is_correct"] is True
+    assert result["results"][0]["user_answer"] == result["results"][0]["correct_answer"]
 
 
 def test_quiz_submission_increments_existing_weak_area(client: TestClient):
