@@ -172,10 +172,19 @@ def _normalize_sql_for_postgres(sql: str, params: tuple) -> tuple[str, Dict[str,
 
 def get_db_connection():
     """Create a connection to the configured database without splitting data stores."""
-    if IS_POSTGRES:
-        return PostgresConnection(engine.connect())
+    global IS_POSTGRES, engine
+    if IS_POSTGRES and engine:
+        try:
+            return PostgresConnection(engine.connect())
+        except Exception as exc:
+            logger.warning(
+                "PostgreSQL connection failed (%s). Falling back to local SQLite database at %s.",
+                exc, DB_FILE_PATH
+            )
+            IS_POSTGRES = False
+            engine = None
 
-    sqlite_path = DATABASE_URL.removeprefix("sqlite:///")
+    sqlite_path = DATABASE_URL.removeprefix("sqlite:///") if not IS_POSTGRES and DATABASE_URL.startswith("sqlite:///") else ""
     conn = sqlite3.connect(sqlite_path or DB_FILE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -258,10 +267,19 @@ def _migrate_sqlite_scoped_uniques(cursor) -> None:
 
 def init_db() -> None:
     """Initialize the configured relational schema."""
+    global IS_POSTGRES, engine
     try:
         if IS_POSTGRES:
-            _init_postgres_db()
-            return
+            try:
+                _init_postgres_db()
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Configured PostgreSQL database is unreachable (%s). Falling back to local SQLite database at %s.",
+                    exc, DB_FILE_PATH
+                )
+                IS_POSTGRES = False
+                engine = None
 
         with get_db_connection() as conn:
             cursor = conn.cursor()

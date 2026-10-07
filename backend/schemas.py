@@ -8,6 +8,26 @@ class SocraticChatRequest(BaseModel):
     conversation_history: Optional[List[Dict[str, str]]] = Field(default_factory=list)
     document_id: Optional[str] = None
 
+    @field_validator("level", mode="before")
+    @classmethod
+    def normalize_level(cls, value: Any) -> str:
+        if not value or not str(value).strip():
+            return "Beginner"
+        normalized = str(value).strip().capitalize()
+        if normalized in ("Beginner", "Intermediate", "Advanced"):
+            return normalized
+        return "Beginner"
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def normalize_language(cls, value: Any) -> str:
+        if not value or not str(value).strip():
+            return "English"
+        normalized = str(value).strip().capitalize()
+        if normalized in ("English", "Hindi", "Telugu"):
+            return normalized
+        return "English"
+
 
 class AccountCredentials(BaseModel):
     email: str = Field(..., min_length=3, max_length=254)

@@ -233,6 +233,10 @@ async def generate_socratic_chat(req: SocraticChatRequest, student_id: int = Dep
         detected_lang, _ = multilingual_detector.detect_language(req.query, fallback_language=req.language or "English")
         effective_lang = req.language if req.language in ("Hindi", "Telugu") else detected_lang
 
+        # Normalize pedagogical mode / level to Beginner, Intermediate, or Advanced
+        raw_level = (req.level or "Beginner").strip().capitalize()
+        effective_level = raw_level if raw_level in ("Beginner", "Intermediate", "Advanced") else "Beginner"
+
         tutor_ctx = context_builder.build_tutor_context(
             student_id=student_id,
             query_topic=req.query.strip(),
@@ -243,7 +247,7 @@ async def generate_socratic_chat(req: SocraticChatRequest, student_id: int = Dep
             if area != "None recorded"
         ]
         system_prompt = prompt_factory.get_system_prompt(
-            level=req.level,
+            level=effective_level,
             subject=tutor_ctx["current_subject"],
             topic=req.query.strip(),
             language=effective_lang,
@@ -251,6 +255,8 @@ async def generate_socratic_chat(req: SocraticChatRequest, student_id: int = Dep
         )
         system_prompt = (
             f"{system_prompt}\n\n"
+            f"SELECTED PEDAGOGICAL MODE: {effective_level.upper()}\n"
+            f"You MUST strictly adapt the explanation depth, complexity, terminology, and Socratic questioning strategy to the {effective_level.upper()} learner level.\n\n"
             f"{context_builder.format_tutor_context_prompt(tutor_ctx)}\n\n"
             "You are acting as a Socratic tutor. Help the student reason step by step with "
             "supportive hints and questions instead of immediately giving away the full solution. "
@@ -267,11 +273,12 @@ async def generate_socratic_chat(req: SocraticChatRequest, student_id: int = Dep
             system_prompt=system_prompt,
             user_query=user_query,
             conversation_history=req.conversation_history,
+            level=effective_level,
         )
 
         return SocraticChatResponse(
             response=response_text,
-            level=req.level,
+            level=effective_level,
             language=effective_lang,
             quick_actions=[],
             citations=None,

@@ -135,3 +135,36 @@ def test_document_answer_uses_fallback_model_on_rate_limit():
 
     assert response == "Answer from the source."
     assert attempted_models == ["busy-model", "available-model"]
+
+
+@pytest.mark.parametrize("mode", ["Beginner", "Intermediate", "Advanced"])
+def test_generate_tutor_response_passes_pedagogical_mode_to_gemini(mode):
+    captured_config = {}
+
+    class Chats:
+        def create(self, model, config, history):
+            captured_config["config"] = config
+            return SimpleNamespace(
+                send_message=lambda _msg: SimpleNamespace(
+                    text=f"Tutoring in {mode} mode."
+                )
+            )
+
+    client = GeminiLLMClient(api_key="test-key")
+    client.default_model_name = "test-model"
+    client.fast_model_name = "test-model"
+    client._client = SimpleNamespace(chats=Chats())
+
+    res = anyio.run(
+        client.generate_tutor_response,
+        "You are EduMate AI tutor.",
+        "How do arrays work?",
+        None,
+        False,
+        None,
+        mode,
+    )
+
+    assert res == f"Tutoring in {mode} mode."
+    assert f"PEDAGOGICAL MODE: {mode.upper()}" in captured_config["config"].system_instruction
+

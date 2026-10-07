@@ -1,21 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChatMessage, StudentProfile } from '../types';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ChatMessage, LearningLevel, Language, StudentProfile } from '../types';
 import { sendSocraticChatMessage, logVoiceSession } from '../services/api';
 import { 
   Send, 
   Mic, 
   MicOff, 
   Sparkles, 
-  RotateCcw, 
   Volume2, 
-  BookOpen, 
-  HelpCircle, 
+  VolumeX,
   Code, 
   CheckCircle2,
   FileText,
+  HelpCircle,
   Lightbulb,
-  MessageSquare,
   Loader2,
+  Layers,
+  GraduationCap,
+  Zap,
 } from 'lucide-react';
 
 interface ChatViewProps {
@@ -29,22 +30,135 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState('');
+  
+  // Pedagogical Mode: Beginner, Intermediate, Advanced
+  const [selectedMode, setSelectedMode] = useState<LearningLevel>(
+    (profile.level as LearningLevel) || 'Beginner'
+  );
+
+  // Audio Playback State
+  const [activeAudioMessageId, setActiveAudioMessageId] = useState<string | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // Keep selected mode in sync with profile if profile updates
+  useEffect(() => {
+    if (profile.level && ['Beginner', 'Intermediate', 'Advanced'].includes(profile.level)) {
+      setSelectedMode(profile.level as LearningLevel);
+    }
+  }, [profile.level]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Clean raw markdown and KaTeX blocks for clear, natural speech output
+  const cleanTextForSpeech = useCallback((raw: string): string => {
+    return raw
+      .replace(/\$\$.*?\$\$/gs, ' mathematical equation ')
+      .replace(/\$.*?\$/g, ' formula ')
+      .replace(/```[\s\S]*?```/g, ' code snippet provided in explanation. ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[*#_~>]/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\n+/g, ' ')
+      .trim();
+  }, []);
+
+  // Text-To-Speech (Audio Output) Engine
+  const stopAudio = useCallback(() => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setActiveAudioMessageId(null);
+    setIsPlayingAudio(false);
+  }, []);
+
+  const playAudioForText = useCallback((text: string, language?: string, messageId?: string) => {
+    if (!('speechSynthesis' in window)) {
+      console.warn('Speech synthesis not supported in this browser.');
+      return;
+    }
+
+    // Stop existing audio if playing
+    window.speechSynthesis.cancel();
+
+    const spokenText = cleanTextForSpeech(text);
+    if (!spokenText) return;
+
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    
+    // Select language
+    const lang = language || profile.language || 'English';
+    if (lang === 'Telugu') {
+      utterance.lang = 'te-IN';
+    } else if (lang === 'Hindi') {
+      utterance.lang = 'hi-IN';
+    } else {
+      utterance.lang = 'en-US';
+    }
+
+    // Attempt to match installed voice for target language
+    const voices = window.speechSynthesis.getVoices();
+    const matchedVoice = voices.find(v => v.lang.toLowerCase().startsWith(utterance.lang.toLowerCase().slice(0, 2)));
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+    }
+
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => {
+      setIsPlayingAudio(true);
+      if (messageId) setActiveAudioMessageId(messageId);
+    };
+
+    utterance.onend = () => {
+      setIsPlayingAudio(false);
+      setActiveAudioMessageId(null);
+    };
+
+    utterance.onerror = (e) => {
+      console.warn('Speech synthesis error:', e);
+      setIsPlayingAudio(false);
+      setActiveAudioMessageId(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+
+    // Record voice activity
+    logVoiceSession({
+      language: lang,
+      topic: profile.currentTopic || text.slice(0, 100),
+      duration_seconds: Math.max(10, Math.round(spokenText.split(' ').length / 2.5)),
+      transcript_summary: text.slice(0, 100),
+    });
+  }, [cleanTextForSpeech, profile.language, profile.currentTopic]);
+
+  // Clean up audio synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const handleSend = async (textToSend?: string) => {
     const query = textToSend || inputText;
     if (!query.trim() || isLoading) return;
+
+    // Stop current audio before sending new query
+    stopAudio();
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       sender: 'student',
       text: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      level: selectedMode,
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -52,34 +166,31 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
     setIsLoading(true);
 
     try {
+      // Pass selected mode (Beginner, Intermediate, Advanced) directly to backend & Gemini
       const res = await sendSocraticChatMessage({
         query,
-        level: profile.level,
-        language: profile.language,
+        level: selectedMode,
+        language: profile.language || 'English',
         conversation_history: messages.map(m => ({ sender: m.sender, text: m.text })),
       });
 
+      const aiMsgId = (Date.now() + 1).toString();
       const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: aiMsgId,
         sender: 'tutor',
         text: res.response,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        level: profile.level,
-        language: profile.language,
+        level: (res.level as LearningLevel) || selectedMode,
+        language: (res.language as Language) || profile.language,
         isAudio: isVoiceActive,
         quickActions: res.quick_actions,
       };
 
       setMessages(prev => [...prev, aiMsg]);
 
-      // If voice active, log session metadata
+      // If voice output is enabled (Voice ON), automatically play audio speech
       if (isVoiceActive) {
-        logVoiceSession({
-          language: profile.language,
-          topic: profile.currentTopic || query.slice(0, 100),
-          duration_seconds: 20,
-          transcript_summary: query.slice(0, 100),
-        });
+        playAudioForText(res.response, res.language || profile.language, aiMsgId);
       }
     } catch (err: any) {
       const errorMsg: ChatMessage = {
@@ -87,7 +198,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
         sender: 'tutor',
         text: `⚠️ **Connection Error**: ${err.message || 'Unable to connect to the EduMate AI service.'}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        level: profile.level,
+        level: selectedMode,
         language: profile.language,
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -154,6 +265,24 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
     }
   };
 
+  const modeDescriptions: Record<LearningLevel, { badge: string; icon: any; summary: string }> = {
+    Beginner: {
+      badge: '🌱 Beginner',
+      icon: Layers,
+      summary: 'Relatable analogies, foundational concepts & gentle step-by-step guidance',
+    },
+    Intermediate: {
+      badge: '⚡ Intermediate',
+      icon: Zap,
+      summary: 'Technical precision, Big-O complexity, code examples & problem trade-offs',
+    },
+    Advanced: {
+      badge: '🚀 Advanced',
+      icon: GraduationCap,
+      summary: 'Formal rigor, mathematical proofs, edge cases & deep architectural analysis',
+    },
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -163,6 +292,93 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
       position: 'relative',
       background: 'var(--bg-primary)'
     }}>
+      {/* Pedagogical Mode & Audio Bar */}
+      <div style={{
+        padding: '10px 20px',
+        backgroundColor: 'var(--bg-secondary)',
+        borderBottom: '1px solid var(--border-color)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '10px',
+        zIndex: 10,
+      }}>
+        {/* Left: Interactive Mode Pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginRight: '4px' }}>
+            Tutor Mode:
+          </span>
+          {(['Beginner', 'Intermediate', 'Advanced'] as LearningLevel[]).map((mode) => {
+            const isSelected = selectedMode === mode;
+            const meta = modeDescriptions[mode];
+            const Icon = meta.icon;
+            const badgeColor = mode === 'Beginner' ? '#10b981' : mode === 'Intermediate' ? '#3b82f6' : '#a855f7';
+            const badgeBg = mode === 'Beginner' 
+              ? 'rgba(16, 185, 129, 0.16)' 
+              : mode === 'Intermediate' 
+              ? 'rgba(59, 130, 246, 0.16)' 
+              : 'rgba(168, 85, 247, 0.16)';
+
+            return (
+              <button
+                key={mode}
+                onClick={() => setSelectedMode(mode)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '0.78rem',
+                  fontWeight: isSelected ? 600 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  border: isSelected ? `1.5px solid ${badgeColor}` : '1px solid var(--border-color)',
+                  background: isSelected ? badgeBg : 'var(--bg-tertiary)',
+                  color: isSelected ? badgeColor : 'var(--text-secondary)',
+                  boxShadow: isSelected ? `0 0 10px ${badgeBg}` : 'none',
+                }}
+                title={meta.summary}
+              >
+                <Icon size={13} />
+                <span>{mode}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right: Active Mode Summary & Audio Status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Strategy:</span>
+            <span>{modeDescriptions[selectedMode].summary}</span>
+          </div>
+          {isPlayingAudio && (
+            <button
+              onClick={stopAudio}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: 'var(--radius-full)',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                color: '#f87171',
+                fontSize: '0.74rem',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+              title="Stop audio playback"
+            >
+              <VolumeX size={12} />
+              <span>Stop Audio</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Message Feed */}
       <div style={{
         flex: 1,
@@ -200,9 +416,27 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
               Welcome to EduMate AI Tutor
             </h3>
-            <p style={{ maxWidth: '520px', fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Ask a question to begin an interactive Socratic tutoring session.
+            <p style={{ maxWidth: '520px', fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '12px' }}>
+              Ask a question to begin an interactive Socratic tutoring session in <strong>{selectedMode}</strong> mode.
             </p>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              fontSize: '0.78rem',
+              color: 'var(--text-secondary)'
+            }}>
+              <span>Active Mode:</span>
+              <strong style={{ color: 'var(--accent-primary)' }}>{selectedMode}</strong>
+              <span>• Voice Audio:</span>
+              <strong style={{ color: isVoiceActive ? '#34d399' : 'var(--text-muted)' }}>
+                {isVoiceActive ? 'Auto-speak ON' : 'Manual Listen Only'}
+              </strong>
+            </div>
           </div>
         ) : (
           messages.map((msg) => (
@@ -231,14 +465,62 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
               <span>•</span>
               <span>{msg.timestamp}</span>
               {msg.level && (
-                <span className="badge badge-beginner" style={{ fontSize: '0.65rem' }}>
+                <span 
+                  className={`badge badge-${msg.level.toLowerCase()}`} 
+                  style={{ fontSize: '0.65rem', textTransform: 'capitalize' }}
+                >
                   {msg.level}
                 </span>
               )}
               {msg.isAudio && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent-cyan)' }}>
-                  <Volume2 size={12} /> Voice Output
+                  <Volume2 size={12} /> Voice
                 </span>
+              )}
+
+              {/* Message Audio Player Button for Tutor Responses */}
+              {msg.sender === 'tutor' && (
+                <button
+                  onClick={() => {
+                    if (activeAudioMessageId === msg.id && isPlayingAudio) {
+                      stopAudio();
+                    } else {
+                      playAudioForText(msg.text, msg.language || profile.language, msg.id);
+                    }
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginLeft: '4px',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: '0.7rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease',
+                    border: activeAudioMessageId === msg.id && isPlayingAudio 
+                      ? '1px solid rgba(239, 68, 68, 0.4)' 
+                      : '1px solid rgba(59, 130, 246, 0.3)',
+                    background: activeAudioMessageId === msg.id && isPlayingAudio 
+                      ? 'rgba(239, 68, 68, 0.15)' 
+                      : 'rgba(59, 130, 246, 0.12)',
+                    color: activeAudioMessageId === msg.id && isPlayingAudio ? '#f87171' : '#60a5fa',
+                  }}
+                  title={activeAudioMessageId === msg.id && isPlayingAudio ? 'Stop reading' : 'Listen to this explanation'}
+                >
+                  {activeAudioMessageId === msg.id && isPlayingAudio ? (
+                    <>
+                      <VolumeX size={11} />
+                      <span>Stop</span>
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 size={11} />
+                      <span>Listen</span>
+                    </>
+                  )}
+                </button>
               )}
             </div>
 
@@ -258,6 +540,25 @@ export const ChatView: React.FC<ChatViewProps> = ({ profile, isVoiceActive }) =>
               <div style={{ whiteSpace: 'pre-line', fontSize: '0.92rem' }}>
                 {msg.text}
               </div>
+
+              {/* Active Audio Waveform Indicator */}
+              {activeAudioMessageId === msg.id && isPlayingAudio && (
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginTop: '12px',
+                  padding: '6px 12px',
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.76rem',
+                  color: '#93c5fd',
+                }}>
+                  <Volume2 size={14} className="pulse-active" />
+                  <span>Speaking in {msg.language || profile.language || 'English'} ({msg.level || selectedMode} mode)...</span>
+                </div>
+              )}
 
               {/* Formula Block preview if present */}
               {msg.formula && (

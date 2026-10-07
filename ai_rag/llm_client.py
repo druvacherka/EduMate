@@ -47,10 +47,20 @@ class GeminiLLMClient:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         use_fast_model: bool = False,
         generation_temperature: Optional[float] = None,
+        level: Optional[str] = None,
     ) -> str:
         """Generate a tutor response with Gemini; never substitute simulated content."""
         if self._client is None:
             raise RuntimeError("Socratic tutoring requires a configured GEMINI_API_KEY.")
+
+        if level:
+            logger.info("Generating Gemini tutor response in pedagogical mode: %s", level)
+            if f"MODE: {level.upper()}" not in system_prompt:
+                system_prompt = (
+                    f"PEDAGOGICAL MODE: {level.upper()}\n"
+                    f"Calibrate explanation depth, vocabulary, and Socratic guidance strictly to {level.upper()} level.\n\n"
+                    f"{system_prompt}"
+                )
 
         chat_history: List[types.Content] = []
         if conversation_history:
